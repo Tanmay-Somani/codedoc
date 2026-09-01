@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import {
   Bot,
-  Check,
   Eye,
   EyeOff,
   KeyRound,
@@ -45,12 +45,36 @@ const externalServices = [
   { id: "stackexchange", name: "Stack Exchange", keys: [] },
 ];
 
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const item = {
+  hidden: { opacity: 0, y: 8 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] },
+  },
+};
+
 export default function SettingsPage() {
   const [show, setShow] = useState<Record<string, boolean>>({});
   const [values, setValues] = useState<Record<string, string>>({});
 
   return (
-    <div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
       <PageHeader
         title="Settings"
         description="Configure providers and encrypted API keys"
@@ -61,137 +85,149 @@ export default function SettingsPage() {
         </Badge>
       </PageHeader>
 
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Bot className="h-4 w-4 text-primary" />
-              AI Providers
-            </CardTitle>
-            <CardDescription>
-              Keys never leave the server, are never logged, and are encrypted
-              before storage.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {llmProviders.map((p, idx) => (
-              <div key={p.id}>
-                {idx > 0 && <Separator className="mb-4" />}
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{p.name}</span>
-                    {p.primary && <Badge>Primary</Badge>}
+      <motion.div
+        className="space-y-6"
+        variants={container}
+        initial="hidden"
+        animate="show"
+      >
+        <motion.div variants={item}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bot className="h-4 w-4 text-primary" />
+                AI Providers
+              </CardTitle>
+              <CardDescription>
+                Keys never leave the server, are never logged, and are encrypted
+                before storage.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {llmProviders.map((p, idx) => (
+                <div key={p.id}>
+                  {idx > 0 && <Separator className="mb-4" />}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{p.name}</span>
+                      {p.primary && <Badge>Primary</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{p.desc}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">{p.desc}</p>
+                  {p.keys.map((k) => {
+                    const keyName = `${p.id}__${k}`;
+                    const shown = show[keyName];
+                    return (
+                      <div key={k} className="mt-2 flex items-center gap-2">
+                        <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="relative flex-1">
+                          <Input
+                            type={shown ? "text" : "password"}
+                            placeholder={`${p.name} ${k.toLowerCase()}`}
+                            value={values[keyName] ?? ""}
+                            onChange={(e) =>
+                              setValues((v) => ({ ...v, [keyName]: e.target.value }))
+                            }
+                            className="pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShow((s) => ({ ...s, [keyName]: !s[keyName] }))
+                            }
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-200"
+                          >
+                            {shown ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                {p.keys.map((k) => {
-                  const keyName = `${p.id}__${k}`;
-                  const shown = show[keyName];
-                  return (
-                    <div key={k} className="mt-2 flex items-center gap-2">
-                      <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <div className="relative flex-1">
+              ))}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={item}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                External Services
+              </CardTitle>
+              <CardDescription>
+                Optional data sources for enrichment and research.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {externalServices.map((p) => {
+                const enabled = values[`enabled__${p.id}`];
+                const keyName = `${p.id}__key`;
+                return (
+                  <div key={p.id}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium">{p.name}</span>
+                        {p.keys.length === 0 && (
+                          <Badge variant="secondary" className="ml-2">
+                            No key needed
+                          </Badge>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setValues((v) => ({
+                            ...v,
+                            [`enabled__${p.id}`]: enabled ? "" : "on",
+                          }))
+                        }
+                        className={`relative h-5 w-9 rounded-full transition-colors duration-300 ease-out-expo ${
+                          enabled ? "bg-primary" : "bg-muted"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-300 ease-out-expo ${
+                            enabled ? "translate-x-4" : "translate-x-0.5"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {enabled &&
+                      p.keys.map((k) => (
                         <Input
-                          type={shown ? "text" : "password"}
+                          key={k}
+                          className="mt-2"
+                          type="password"
                           placeholder={`${p.name} ${k.toLowerCase()}`}
                           value={values[keyName] ?? ""}
                           onChange={(e) =>
                             setValues((v) => ({ ...v, [keyName]: e.target.value }))
                           }
-                          className="pr-10"
                         />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setShow((s) => ({ ...s, [keyName]: !s[keyName] }))
-                          }
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {shown ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              External Services
-            </CardTitle>
-            <CardDescription>
-              Optional data sources for enrichment and research.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {externalServices.map((p) => {
-              const enabled = values[`enabled__${p.id}`];
-              const keyName = `${p.id}__key`;
-              return (
-                <div key={p.id}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-medium">{p.name}</span>
-                      {p.keys.length === 0 && (
-                        <Badge variant="secondary" className="ml-2">
-                          No key needed
-                        </Badge>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setValues((v) => ({
-                          ...v,
-                          [`enabled__${p.id}`]: enabled ? "" : "on",
-                        }))
-                      }
-                      className={`relative h-5 w-9 rounded-full transition-colors ${
-                        enabled ? "bg-primary" : "bg-muted"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                          enabled ? "translate-x-4" : "translate-x-0.5"
-                        }`}
-                      />
-                    </button>
+                      ))}
                   </div>
-                  {enabled &&
-                    p.keys.map((k) => (
-                      <Input
-                        key={k}
-                        className="mt-2"
-                        type="password"
-                        placeholder={`${p.name} ${k.toLowerCase()}`}
-                        value={values[keyName] ?? ""}
-                        onChange={(e) =>
-                          setValues((v) => ({ ...v, [keyName]: e.target.value }))
-                        }
-                      />
-                    ))}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <div className="flex justify-end">
+        <motion.div
+          variants={item}
+          className="flex justify-end"
+        >
           <Button className="gap-1.5">
             <Save className="h-4 w-4" />
             Save settings
           </Button>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   );
 }

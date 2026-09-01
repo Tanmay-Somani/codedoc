@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "12-principles-of-animation": {
+      "source": "raphaelsalaja/skill",
+      "sourceType": "github",
+      "skillPath": "skills/12-principles-of-animation/SKILL.md",
+      "computedHash": "028c3bad9e7417460e0d2094fc0c1b9d601e56317d38c4f5d124666b06a9405b"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "93f53fd1c0352d3d7ec17b8f73d7351bf76f4821e55d123c9d2abc2c53ba48e4"
+    },
+    "improve-ui": {
+      "source": "ibelick/ui-skills",
+      "sourceType": "github",
+      "skillPath": "skills/improve-ui/SKILL.md",
+      "computedHash": "31c09b79a1c196adccb1637a225cef54f537da87430fda0ba309ef83e78f10e5"
+    }
+  }
+}

@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Slot } from "@/components/ui/slot";
@@ -7,13 +9,13 @@ type Size = "default" | "sm" | "lg" | "icon";
 
 const variantClasses: Record<Variant, string> = {
   default:
-    "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+    "bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 hover:shadow-primary/30 active:scale-[0.97]",
   secondary:
-    "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+    "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-[0.97]",
   outline:
-    "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-  ghost: "hover:bg-accent hover:text-accent-foreground",
-  destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+    "border border-input bg-background hover:bg-accent hover:text-accent-foreground active:scale-[0.97]",
+  ghost: "hover:bg-accent hover:text-accent-foreground active:scale-[0.97]",
+  destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:scale-[0.97]",
   link: "text-primary underline-offset-4 hover:underline",
 };
 
@@ -34,7 +36,7 @@ export interface ButtonProps
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", asChild = false, ...props }, ref) => {
     const classes = cn(
-      "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+      "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all duration-200 ease-out-expo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50",
       variantClasses[variant],
       sizeClasses[size],
       className

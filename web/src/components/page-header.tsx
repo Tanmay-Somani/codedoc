@@ -1,3 +1,6 @@
+"use client";
+
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export function PageHeader({
@@ -12,7 +15,12 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-6 flex flex-wrap items-end justify-between gap-4", className)}>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+      className={cn("mb-6 flex flex-wrap items-end justify-between gap-4", className)}
+    >
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         {description && (
@@ -20,6 +28,6 @@ export function PageHeader({
         )}
       </div>
       {children}
-    </div>
+    </motion.div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   BrainCircuit,
   FileCode2,
@@ -97,6 +98,26 @@ const sampleFindings: Finding[] = [
   },
 ];
 
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const item = {
+  hidden: { opacity: 0, x: -10 },
+  show: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+  },
+};
+
 export default function FindingsPage() {
   const analyses = useQuery({ queryKey: ["analyses"], queryFn: api.analyses });
   const [selectedSeverity, setSelectedSeverity] = useState<Severity | "all">("all");
@@ -140,13 +161,22 @@ export default function FindingsPage() {
   const activeFinding = selected ?? filtered[0] ?? null;
 
   return (
-    <div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
       <PageHeader
         title="Findings Explorer"
         description="Investigate findings with severity, CVSS, and AI explanations"
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.3 }}
+        className="mb-4 flex flex-wrap items-center gap-2"
+      >
         <Button
           size="sm"
           variant={selectedSeverity === "all" ? "default" : "outline"}
@@ -165,9 +195,14 @@ export default function FindingsPage() {
             {sev} ({counts[sev] ?? 0})
           </Button>
         ))}
-      </div>
+      </motion.div>
 
-      <div className="relative mb-4">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.3 }}
+        className="relative mb-4"
+      >
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-9"
@@ -175,121 +210,157 @@ export default function FindingsPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-      </div>
+      </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Radar className="h-4 w-4 text-primary" />
-              Findings
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="max-h-[70vh] space-y-2 overflow-y-auto p-4">
-            {filtered.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                No findings match your filters.
-              </p>
-            ) : (
-              filtered.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => setSelected(f)}
-                  className={cn(
-                    "w-full rounded-md border p-3 text-left transition-colors",
-                    activeFinding?.id === f.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:bg-muted/40"
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <SeverityBadge severity={f.severity} />
-                    <span className="text-xs text-muted-foreground">{f.tool}</span>
-                  </div>
-                  <p className="mt-2 text-sm font-medium leading-snug">{f.message}</p>
-                  <p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
-                    <FileCode2 className="h-3 w-3 shrink-0" />
-                    {f.file_path ?? "unknown"}
-                    {f.line_start ? `:${f.line_start}` : ""}
-                  </p>
-                  {f.vulnerability?.cvss_score != null && (
-                    <div className="mt-2 flex items-center gap-2 text-xs">
-                      <span className="text-muted-foreground">
-                        {f.vulnerability.identifier}
+        <motion.div
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Radar className="h-4 w-4 text-primary" />
+                Findings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="max-h-[70vh] space-y-2 overflow-y-auto p-4">
+              {filtered.length === 0 ? (
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  No findings match your filters.
+                </p>
+              ) : (
+                <motion.div variants={container} initial="hidden" animate="show">
+                  <AnimatePresence mode="popLayout">
+                    {filtered.map((f) => (
+                      <motion.div
+                        key={f.id}
+                        variants={item}
+                        layout
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <button
+                          onClick={() => setSelected(f)}
+                          className={cn(
+                            "w-full rounded-lg border p-3 text-left transition-all duration-200 ease-out-expo",
+                            activeFinding?.id === f.id
+                              ? "border-primary bg-primary/5 shadow-sm shadow-primary/10"
+                              : "border-border/50 hover:border-border hover:bg-muted/30"
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <SeverityBadge severity={f.severity} />
+                            <span className="text-xs text-muted-foreground">{f.tool}</span>
+                          </div>
+                          <p className="mt-2 text-sm font-medium leading-snug">{f.message}</p>
+                          <p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                            <FileCode2 className="h-3 w-3 shrink-0" />
+                            {f.file_path ?? "unknown"}
+                            {f.line_start ? `:${f.line_start}` : ""}
+                          </p>
+                          {f.vulnerability?.cvss_score != null && (
+                            <div className="mt-2 flex items-center gap-2 text-xs">
+                              <span className="text-muted-foreground">
+                                {f.vulnerability.identifier}
+                              </span>
+                              <Badge variant="destructive" className="gap-1">
+                                CVSS {f.vulnerability.cvss_score.toFixed(1)}
+                              </Badge>
+                            </div>
+                          )}
+                        </button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.25, duration: 0.4 }}
+        >
+          <Card className="sticky top-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4 text-primary" />
+                AI Investigation
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AnimatePresence mode="wait">
+                {activeFinding ? (
+                  <motion.div
+                    key={activeFinding.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    className="space-y-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <SeverityBadge severity={activeFinding.severity} />
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {activeFinding.rule_id ?? activeFinding.tool}
                       </span>
-                      <Badge variant="destructive" className="gap-1">
-                        CVSS {f.vulnerability.cvss_score.toFixed(1)}
-                      </Badge>
                     </div>
-                  )}
-                </button>
-              ))
-            )}
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4 text-primary" />
-              AI Investigation
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {activeFinding ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <SeverityBadge severity={activeFinding.severity} />
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {activeFinding.rule_id ?? activeFinding.tool}
-                  </span>
-                </div>
+                    <div className="rounded-lg bg-muted p-3 font-mono text-xs">
+                      <span className="text-muted-foreground">{activeFinding.file_path}</span>
+                      <span className="text-primary">
+                        {activeFinding.line_start ? `:${activeFinding.line_start}` : ""}
+                      </span>
+                      <pre className="mt-2 whitespace-pre-wrap text-foreground">
+                        {activeFinding.message}
+                      </pre>
+                    </div>
 
-                <div className="rounded-md bg-muted p-3 font-mono text-xs">
-                  <span className="text-muted-foreground">{activeFinding.file_path}</span>
-                  <span className="text-primary">
-                    {activeFinding.line_start ? `:${activeFinding.line_start}` : ""}
-                  </span>
-                  <pre className="mt-2 whitespace-pre-wrap text-foreground">
-                    {activeFinding.message}
-                  </pre>
-                </div>
+                    <div>
+                      <h4 className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <BrainCircuit className="h-3.5 w-3.5" />
+                        Summary Agent · Explanation
+                      </h4>
+                      <p className="text-sm leading-relaxed">
+                        {activeFinding.ai_explanation ??
+                          "No AI explanation yet. Download the Summary Agent or run an analysis to generate it."}
+                      </p>
+                    </div>
 
-                <div>
-                  <h4 className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-                    <BrainCircuit className="h-3.5 w-3.5" />
-                    Summary Agent · Explanation
-                  </h4>
-                  <p className="text-sm leading-relaxed">
-                    {activeFinding.ai_explanation ??
-                      "No AI explanation yet. Download the Summary Agent or run an analysis to generate it."}
-                  </p>
-                </div>
+                    {activeFinding.root_cause && (
+                      <div>
+                        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Debug Agent · Root cause
+                        </h4>
+                        <p className="text-sm leading-relaxed">{activeFinding.root_cause}</p>
+                      </div>
+                    )}
 
-                {activeFinding.root_cause && (
-                  <div>
-                    <h4 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-                      Debug Agent · Root cause
-                    </h4>
-                    <p className="text-sm leading-relaxed">{activeFinding.root_cause}</p>
-                  </div>
+                    {findingsQuery.isLoading && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Loading live findings…
+                      </div>
+                    )}
+                  </motion.div>
+                ) : (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
+                    Select a finding to see its AI investigation.
+                  </motion.p>
                 )}
-
-                {findingsQuery.isLoading && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Loading live findings…
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                Select a finding to see its AI investigation.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }

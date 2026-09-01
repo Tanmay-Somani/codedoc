@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import {
   CheckCircle2,
   Database,
@@ -49,6 +50,26 @@ const fallbackState: Record<string, "healthy" | "unknown"> = {
   llm: "healthy",
 };
 
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.03,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const item = {
+  hidden: { opacity: 0, y: 6 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+  },
+};
+
 export default function IntegrationsPage() {
   const integrations = useQuery({
     queryKey: ["integrations"],
@@ -62,7 +83,11 @@ export default function IntegrationsPage() {
     : [];
 
   return (
-    <div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
       <PageHeader
         title="Integrations"
         description="Provider health and external API usage"
@@ -74,72 +99,90 @@ export default function IntegrationsPage() {
       </PageHeader>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Plug className="h-4 w-4 text-primary" />
-              Service Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {integrations.isLoading ? (
-              <div className="space-y-2 py-2">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between py-2"
-                  >
-                    <div className="space-y-1">
-                      <Skeleton className="h-3.5 w-32" />
-                      <Skeleton className="h-3 w-20" />
-                    </div>
-                    <Skeleton className="h-5 w-20 rounded-full" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="divide-y">
-                {serviceCatalog.map((s) => {
-                  const providerValue = providers[s.name.toLowerCase()];
-                  const isPresent = providerValue !== undefined;
-                  const state = isPresent
-                    ? "healthy"
-                    : (fallbackState[s.key] ?? "unknown");
-                  const healthy = state !== "unknown";
-                  return (
+        <motion.div
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1, duration: 0.4 }}
+          className="lg:col-span-2"
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Plug className="h-4 w-4 text-primary" />
+                Service Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {integrations.isLoading ? (
+                <div className="space-y-2 py-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
                     <div
-                      key={s.name}
-                      className="flex items-center justify-between py-3"
+                      key={i}
+                      className="flex items-center justify-between py-2"
                     >
-                      <div>
-                        <p className="text-sm font-medium">{s.name}</p>
-                        <p className="text-xs text-muted-foreground">{s.group}</p>
+                      <div className="space-y-1">
+                        <Skeleton className="h-3.5 w-32" />
+                        <Skeleton className="h-3 w-20" />
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground">
-                          {isPresent ? providerValue : "configured"}
-                        </span>
-                        <Badge
-                          variant={healthy ? "success" : "secondary"}
-                          className="gap-1.5"
-                        >
-                          {healthy ? (
-                            <CheckCircle2 className="h-3 w-3" />
-                          ) : (
-                            <XCircle className="h-3 w-3" />
-                          )}
-                          {healthy ? "Healthy" : "Unknown"}
-                        </Badge>
-                      </div>
+                      <Skeleton className="h-5 w-20 rounded-full" />
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              ) : (
+                <motion.div
+                  className="divide-y divide-border/50"
+                  variants={container}
+                  initial="hidden"
+                  animate="show"
+                >
+                  {serviceCatalog.map((s) => {
+                    const providerValue = providers[s.name.toLowerCase()];
+                    const isPresent = providerValue !== undefined;
+                    const state = isPresent
+                      ? "healthy"
+                      : (fallbackState[s.key] ?? "unknown");
+                    const healthy = state !== "unknown";
+                    return (
+                      <motion.div
+                        key={s.name}
+                        variants={item}
+                        className="flex items-center justify-between py-3 group hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors duration-200"
+                      >
+                        <div>
+                          <p className="text-sm font-medium">{s.name}</p>
+                          <p className="text-xs text-muted-foreground">{s.group}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-muted-foreground">
+                            {isPresent ? providerValue : "configured"}
+                          </span>
+                          <Badge
+                            variant={healthy ? "success" : "secondary"}
+                            className="gap-1.5"
+                          >
+                            {healthy ? (
+                              <CheckCircle2 className="h-3 w-3" />
+                            ) : (
+                              <XCircle className="h-3 w-3" />
+                            )}
+                            {healthy ? "Healthy" : "Unknown"}
+                          </Badge>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <div className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.15, duration: 0.4 }}
+          className="space-y-6"
+        >
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -168,7 +211,7 @@ export default function IntegrationsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                Api usage
+                API usage
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm">
@@ -180,7 +223,7 @@ export default function IntegrationsPage() {
               <div className="mt-3">
                 <a
                   href={"/docs"}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline transition-colors duration-200"
                 >
                   Open API docs
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -188,8 +231,8 @@ export default function IntegrationsPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
@@ -6,7 +8,7 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        "rounded-lg border bg-card text-card-foreground shadow-sm",
+        "rounded-xl border border-border/50 bg-card text-card-foreground shadow-sm transition-shadow duration-300 ease-out-expo hover:shadow-md hover:shadow-black/20",
         className
       )}
       {...props}

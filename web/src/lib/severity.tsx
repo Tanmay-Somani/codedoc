@@ -5,15 +5,15 @@ export const severityOrder: Severity[] = ["critical", "high", "medium", "low", "
 
 export const severityStyles: Record<Severity, string> = {
   critical:
-    "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
-  high: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
-  medium: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
-  low: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
-  info: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30",
+    "bg-red-500/15 text-red-400 border-red-500/30",
+  high: "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  medium: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  low: "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  info: "bg-slate-500/15 text-slate-400 border-slate-500/30",
 };
 
 export const severityDot: Record<Severity, string> = {
-  critical: "bg-red-500",
+  critical: "bg-red-500 animate-breathe",
   high: "bg-orange-500",
   medium: "bg-amber-500",
   low: "bg-sky-500",
@@ -24,7 +24,7 @@ export function SeverityBadge({ severity, className }: { severity: Severity; cla
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold uppercase",
+        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide",
         severityStyles[severity],
         className
       )}
