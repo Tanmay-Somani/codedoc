@@ -19,6 +19,7 @@ class RepositoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     url: str | None = None
     default_branch: str = "main"
+    is_sample: bool = False
 
 
 class RepositoryOut(BaseModel):
@@ -52,6 +53,18 @@ class AnalysisOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FindingVulnerabilityOut(BaseModel):
+    identifier: str
+    source: str
+    cvss_score: float | None = None
+    cvss_vector: str | None = None
+    summary: str | None = None
+    patched_versions: list[str] | None = None
+    references: list[str] | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class AnalysisVulnerabilityOut(BaseModel):
     id: int
     tool: str
@@ -63,6 +76,7 @@ class AnalysisVulnerabilityOut(BaseModel):
     message: str
     ai_explanation: str | None
     root_cause: str | None
+    vulnerability: FindingVulnerabilityOut | None = None
 
     model_config = {"from_attributes": True}
 

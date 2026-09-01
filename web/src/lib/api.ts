@@ -36,10 +36,15 @@ export const api = {
     ),
 
   repositories: () => request<Repository[]>("/api/repositories"),
-  createRepository: (data: { name: string; url?: string; default_branch?: string }) =>
+  createRepository: (data: {
+    name: string;
+    url?: string;
+    default_branch?: string;
+    is_sample?: boolean;
+  }) =>
     request<{ id: number; name: string }>("/api/repositories", {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, url: data.url?.trim() || undefined }),
     }),
 
   analyses: () => request<Analysis[]>("/api/analyses"),

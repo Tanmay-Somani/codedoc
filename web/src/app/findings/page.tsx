@@ -98,10 +98,20 @@ const sampleFindings: Finding[] = [
 ];
 
 export default function FindingsPage() {
-  const analyses = useQuery({ queryKey: ["analyses"], queryFn: api.analyses });
+  const analyses = useQuery({
+    queryKey: ["analyses"],
+    queryFn: api.analyses,
+    refetchInterval: 5000,
+  });
+  const repos = useQuery({ queryKey: ["repos"], queryFn: api.repositories });
   const [selectedSeverity, setSelectedSeverity] = useState<Severity | "all">("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Finding | null>(null);
+
+  const repoMap = useMemo(
+    () => new Map((repos.data ?? []).map((r) => [r.id, r])),
+    [repos.data]
+  );
 
   const latestCompleted = useMemo(
     () =>
@@ -116,9 +126,21 @@ export default function FindingsPage() {
     enabled: !!latestCompleted,
   });
 
-  const liveFindings = findingsQuery.data ?? [];
-  const findings: Finding[] =
-    liveFindings.length > 0 ? liveFindings : sampleFindings;
+  const findings: Finding[] = useMemo(() => {
+    const liveFindings = findingsQuery.data ?? [];
+    const isSample = latestCompleted
+      ? (repoMap.get(latestCompleted.repository_id)?.is_sample ?? false)
+      : false;
+    return liveFindings.length > 0
+      ? liveFindings
+      : isSample
+        ? sampleFindings
+        : [];
+  }, [findingsQuery.data, latestCompleted, repoMap]);
+
+  const isSample = latestCompleted
+    ? (repoMap.get(latestCompleted.repository_id)?.is_sample ?? false)
+    : false;
 
   const filtered = findings.filter((f) => {
     const sevOk = selectedSeverity === "all" || f.severity === selectedSeverity;
@@ -186,9 +208,20 @@ export default function FindingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="max-h-[70vh] space-y-2 overflow-y-auto p-4">
+            {latestCompleted &&
+              !isSample &&
+              (latestCompleted.status === "queued" ||
+                latestCompleted.status === "running") && (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Scanning repository… results appear automatically.
+                </p>
+              )}
             {filtered.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
-                No findings match your filters.
+                {isSample
+                  ? "No findings match your filters."
+                  : "No findings for this analysis yet."}
               </p>
             ) : (
               filtered.map((f) => (

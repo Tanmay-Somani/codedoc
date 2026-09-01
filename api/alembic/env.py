@@ -2,6 +2,10 @@ import os
 import sys
 from logging.config import fileConfig
 
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 from alembic import context
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
