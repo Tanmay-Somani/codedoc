@@ -28,6 +28,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  baseUrl: API_URL,
+
   health: () => request<HealthResponse>("/health"),
 
   integrationStatus: () =>

@@ -81,8 +81,8 @@ class Settings(BaseSettings):
     serper_api_key: str = ""
 
     # Demo safety limits
-    demo_max_repo_mb: int = 30
-    demo_max_files: int = 1500
+    demo_max_repo_mb: int = 256
+    demo_max_files: int = 5000
     demo_max_concurrent_per_user: int = 1
     demo_analysis_timeout_min: int = 10
 

@@ -5,6 +5,7 @@ import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  AlertTriangle,
   BrainCircuit,
   FileCode2,
   Loader2,
@@ -170,6 +171,8 @@ function FindingsExplorer() {
 
   const scanning =
     !!active && (active.status === "queued" || active.status === "running");
+  const failed = !!active && active.status === "failed";
+  const apiDown = analyses.isError && analyses.data == null;
 
   const findingsQuery = useQuery({
     queryKey: ["findings", active?.id],
@@ -282,6 +285,24 @@ function FindingsExplorer() {
               </CardTitle>
             </CardHeader>
             <CardContent className="max-h-[70vh] space-y-2 overflow-y-auto p-4">
+              {apiDown && (
+                <p className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-600">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Cannot reach the backend API on {api.baseUrl}. Start the API
+                    server, then reload this page.
+                  </span>
+                </p>
+              )}
+              {failed && (
+                <p className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-600">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    <span className="font-semibold">Analysis failed: </span>
+                    {active?.error ?? "unknown error"}
+                  </span>
+                </p>
+              )}
               {scanning && (
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -293,9 +314,13 @@ function FindingsExplorer() {
                 <p className="py-10 text-center text-sm text-muted-foreground">
                   {scanning
                     ? "Scanning repository… findings will appear here automatically."
-                    : isSample
-                      ? "No findings match your filters."
-                      : "No findings for this analysis yet."}
+                    : failed
+                      ? "The analysis did not complete, so there are no findings to show."
+                      : apiDown
+                        ? "The backend API is not responding."
+                        : isSample
+                          ? "No findings match your filters."
+                          : "No findings for this analysis yet."}
                 </p>
               ) : (
                 <motion.div variants={container} initial="hidden" animate="show">
