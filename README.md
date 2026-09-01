@@ -154,6 +154,10 @@ Production checklist:
 > Your keys live in `.env` / server environment only. They are encrypted at rest, never logged,
 > never embedded in the frontend, and never sent to session replay.
 
+## Guided tutorial (driver.js)
+
+Add a driver.js guided tutorial to the README.md — opt-in, client-only, no backend changes.
+
 ## Repository layout
 
 ```
