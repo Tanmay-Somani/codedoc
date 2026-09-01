@@ -12,8 +12,9 @@ For your specific constraints, I would make these changes:
 * **Monitoring:** Prometheus + Grafana
 * **Tracing:** OpenTelemetry
 * **ML tracking:** MLflow
+* **LLM gateway:** OpenRouter (primary — one key, role-routed coding/reasoning/fast models), optional local Ollama (FULL)
 * **Deployment:** everything Dockerized so it can run on one VPS / free compute host / local server
-* **APIs:** GitHub, OSV, NVD/CVE, Stack Exchange, package registries, documentation/search APIs, LLM APIs with free tiers where available
+* **APIs:** GitHub, OSV, NVD/CVE, Stack Exchange, package registries, OpenRouter, documentation/search APIs
 
 I would also **avoid making AWS/GCP/Azure mandatory**.
 
@@ -680,21 +681,32 @@ Prefer small models capable of CPU inference.
 
 ---
 
-# 20. LOCAL LLM SUPPORT
+# 20. AI GATEWAY — OPENROUTER-FIRST LLM SUPPORT
 
-Implement Ollama support.
-
-The application should be able to work using:
+OpenRouter is the **primary** LLM provider: one API key routes to many models (free and paid).
+Models are role-routed to agents:
 
 ```text
-Ollama
+AI Gateway (FastAPI)
+      ↓
+  OpenRouter
+      ↓
+Coding Model ──► Patch Agent       (OPENROUTER_MODEL_CODING)
+Reasoning Model ──► Debug Agent    (OPENROUTER_MODEL_REASONING)
+Fast Model ──► Summary Agent       (OPENROUTER_MODEL_FAST)
+```
+
+Local mode stays available as an OPTIONAL fallback via Ollama (FULL profile, `OLLAMA_ENABLED=true`):
+
+```text
+Ollama (optional)
  ↓
 local model
  ↓
 no LLM API bill
 ```
 
-Potential models:
+Potential local models:
 
 * Qwen coder models
 * DeepSeek coder models
@@ -706,12 +718,12 @@ Create:
 
 ```text
 LLMProvider
-├── OllamaProvider
-├── OpenAIProvider
+├── OpenRouterProvider    (default, role-routed models)
 ├── GeminiProvider
 ├── GroqProvider
-├── OpenRouterProvider
-└── AnthropicProvider
+├── OpenAIProvider
+├── AnthropicProvider
+└── OllamaProvider        (optional local mode)
 ```
 
 The user should choose the provider from settings.
@@ -1125,29 +1137,36 @@ Explanation
 
 # 35. MODEL APIs
 
-Allow optional external inference.
+OpenRouter is the primary entry point; optional external inference providers remain available.
 
-Possible providers with free/developer tiers may include:
+Primary:
+
+* OpenRouter (one key, role-routed coding/reasoning/fast models, free tiers available)
+
+Optional providers with free/developer tiers may include:
 
 * Gemini API
 * Groq
-* OpenRouter
 * Hugging Face inference
 * OpenAI
 * Anthropic
+* Ollama (local, optional)
 
 The system must NOT require any particular paid provider.
 
 Implement automatic fallback:
 
 ```text
-Local model
+OpenRouter
      ↓ fails / unavailable
 
 Free provider
      ↓
 
 Alternative provider
+     ↓
+
+Optional local model (Ollama)
 ```
 
 API keys are configured by the user.
@@ -1161,12 +1180,12 @@ Frontend settings should include:
 ```text
 AI Providers
 
-[ ] Ollama
+[ ] OpenRouter      (primary — one key, role-routed models)
 [ ] Gemini
 [ ] Groq
-[ ] OpenRouter
 [ ] OpenAI
 [ ] Anthropic
+[ ] Ollama         (optional, local)
 
 External Services
 
@@ -1316,7 +1335,7 @@ valkey
 qdrant
 minio
 
-ollama
+ollama               # optional — local LLM mode, FULL profile only
 
 mlflow
 
@@ -1420,7 +1439,7 @@ Public Demo
 ├── FastAPI
 ├── PostgreSQL
 ├── Qdrant
-└── Free API-based inference
+└── OpenRouter (free-tier inference)
 ```
 
 Then provide:
@@ -1602,7 +1621,8 @@ Semgrep / Bandit / ESLint
 * Hugging Face Transformers
 * PyTorch
 * Sentence Transformers
-* Ollama
+* OpenRouter (primary LLM gateway, role-routed models)
+* Ollama (optional local mode)
 * CodeBERT
 * GraphCodeBERT
 * CodeT5
