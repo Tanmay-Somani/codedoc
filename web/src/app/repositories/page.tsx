@@ -1,11 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Boxes,
   Copy,
+  Eye,
   FolderGit2,
   GitBranch,
   Loader2,
@@ -27,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBytes, relativeTime } from "@/lib/severity";
+import type { Repository } from "@/lib/types";
 
 const container = {
   hidden: { opacity: 0 },
@@ -50,24 +53,88 @@ const item = {
 
 export default function RepositoriesPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("main");
+  const [error, setError] = useState<string | null>(null);
+  const [analyzingId, setAnalyzingId] = useState<number | null>(null);
 
   const repos = useQuery({ queryKey: ["repos"], queryFn: api.repositories });
+  const analyses = useQuery({
+    queryKey: ["analyses"],
+    queryFn: api.analyses,
+    refetchInterval: 5000,
+  });
+
+  const activeByRepo = useMemo(() => {
+    const m = new Map<number, boolean>();
+    for (const a of analyses.data ?? []) {
+      if (a.status === "queued" || a.status === "running") {
+        m.set(a.repository_id, true);
+      }
+    }
+    return m;
+  }, [analyses.data]);
+
+  const sampleRepo = (repos.data ?? []).find((r) => r.is_sample);
+  const sampleActive = sampleRepo ? activeByRepo.get(sampleRepo.id) : false;
 
   const createRepo = useMutation({
-    mutationFn: (data: { name: string; url?: string; default_branch?: string }) =>
-      api.createRepository(data),
+    mutationFn: api.createRepository,
     onSuccess: () => {
       setName("");
       setUrl("");
+      setError(null);
       qc.invalidateQueries({ queryKey: ["repos"] });
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Failed to add repository");
     },
   });
 
+  const runAnalysis = useMutation({
+    mutationFn: api.createAnalysis,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["analyses"] });
+      router.push("/findings");
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Failed to start analysis");
+    },
+  });
+
+  const startAnalysis = (repositoryId: number) => {
+    if (activeByRepo.get(repositoryId)) {
+      router.push("/findings");
+      return;
+    }
+    setAnalyzingId(repositoryId);
+    setError(null);
+    runAnalysis.mutate(
+      { repository_id: repositoryId },
+      { onSettled: () => setAnalyzingId(null) }
+    );
+  };
+
   const handleSample = () => {
-    createRepo.mutate({ name: "sample-repo", url: undefined, default_branch: "main" });
+    setError(null);
+    if (sampleRepo && sampleActive) {
+      router.push("/findings");
+      return;
+    }
+    if (sampleRepo) {
+      startAnalysis(sampleRepo.id);
+      return;
+    }
+    createRepo.mutate(
+      { name: "sample-repo", default_branch: "main", is_sample: true },
+      { onSuccess: (repo) => startAnalysis(repo.id) }
+    );
+  };
+
+  const handleDelete = (repo: Repository) => {
+    setError("Deleting repositories is not wired to the backend yet.");
   };
 
   return (
@@ -80,9 +147,20 @@ export default function RepositoriesPage() {
         title="Repositories"
         description="Connect a repository or run the built-in sample"
       >
-        <Button variant="outline" size="sm" onClick={handleSample}>
-          <Rocket className="mr-1 h-4 w-4" />
-          TRY SAMPLE REPOSITORY
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSample}
+          disabled={createRepo.isPending || runAnalysis.isPending}
+        >
+          {(createRepo.isPending || runAnalysis.isPending) && analyzingId === null ? (
+            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+          ) : sampleActive ? (
+            <Eye className="mr-1 h-4 w-4" />
+          ) : (
+            <Rocket className="mr-1 h-4 w-4" />
+          )}
+          {sampleActive ? "View Sample Findings" : "TRY SAMPLE REPOSITORY"}
         </Button>
       </PageHeader>
 
@@ -98,7 +176,8 @@ export default function RepositoriesPage() {
               Connect a repository
             </CardTitle>
             <CardDescription>
-              Paste a Git URL to clone for analysis (no credentials required for public repos).
+              Paste a Git URL to clone for analysis (no credentials required for
+              public repos).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -106,11 +185,19 @@ export default function RepositoriesPage() {
               className="flex flex-wrap items-end gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (name.trim()) createRepo.mutate({ name: name.trim() });
+                if (!name.trim()) return;
+                setError(null);
+                createRepo.mutate({
+                  name: name.trim(),
+                  url: url.trim() || undefined,
+                  default_branch: branch.trim() || "main",
+                });
               }}
             >
               <div className="min-w-[180px] flex-1">
-                <label className="text-xs font-medium text-muted-foreground">Name</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Name
+                </label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -120,7 +207,8 @@ export default function RepositoriesPage() {
               </div>
               <div className="min-w-[240px] flex-[2]">
                 <label className="text-xs font-medium text-muted-foreground">
-                  Git URL <span className="text-muted-foreground/60">(optional)</span>
+                  Git URL{" "}
+                  <span className="text-muted-foreground/60">(optional)</span>
                 </label>
                 <Input
                   value={url}
@@ -129,8 +217,13 @@ export default function RepositoriesPage() {
                 />
               </div>
               <div className="w-28">
-                <label className="text-xs font-medium text-muted-foreground">Branch</label>
-                <Input value={branch} onChange={(e) => setBranch(e.target.value)} />
+                <label className="text-xs font-medium text-muted-foreground">
+                  Branch
+                </label>
+                <Input
+                  value={branch}
+                  onChange={(e) => setBranch(e.target.value)}
+                />
               </div>
               <Button type="submit" disabled={createRepo.isPending || !name.trim()}>
                 {createRepo.isPending ? (
@@ -141,6 +234,9 @@ export default function RepositoriesPage() {
                 Add
               </Button>
             </form>
+            {error && (
+              <p className="mt-3 text-sm text-destructive">{error}</p>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -208,10 +304,23 @@ export default function RepositoriesPage() {
                     <span>{relativeTime(repo.created_at)}</span>
                   </div>
                   <div className="mt-4 flex gap-2">
-                    <Button size="sm" variant="outline">
-                      Analyze
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => startAnalysis(repo.id)}
+                      disabled={analyzingId === repo.id || !!activeByRepo.get(repo.id)}
+                    >
+                      {analyzingId === repo.id || activeByRepo.get(repo.id) ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      ) : null}
+                      {activeByRepo.get(repo.id) ? "Analyzing…" : "Analyze"}
                     </Button>
-                    <Button size="sm" variant="ghost" className="ml-auto">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="ml-auto"
+                      onClick={() => handleDelete(repo)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
