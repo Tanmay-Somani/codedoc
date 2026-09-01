@@ -1,26 +1,24 @@
-name: codedoc-full
+name: codedoc
 
 # ============================================================
-# AI Codebase Doctor - FULL self-hosted deployment
+# STANDARD / FULL mode services - heavy or optional, ALWAYS behind
+# Compose profiles so the default stack stays light.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.full.yml up -d
+#   docker compose --profile standard -f compose.yaml -f compose.prod.yml -f compose.full.yml up -d
+#   docker compose --profile full     -f compose.yaml -f compose.prod.yml -f compose.full.yml up -d
 #
-# Adds: ollama, mlflow, glitchtip, openreplay, prometheus, grafana,
-#       loki, otel-collector, searxng, worker profile, voice/STT.
-#
-# IMPORTANT: The public demo runs LITE only. Do NOT host this whole
-# stack on a tiny free instance - it will become the bottleneck.
+# IMPORTANT: the public demo runs LITE only. Do NOT host this whole stack
+# on a tiny free instance - it will become the bottleneck.
 # ============================================================
 
 services:
+  # Optional local LLM mode (OLLAMA_ENABLED=true). OpenRouter is the default.
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
     volumes:
       - ollamadata:/root/.ollama
     profiles: [full]
-    ports:
-      - "11434:11434"
 
   searxng:
     image: searxng/searxng:latest
@@ -29,22 +27,25 @@ services:
       SEARXNG_BASE_URL: http://searxng:${SEARXNG_PORT:-8080}
     volumes:
       - searxngdata:/etc/searxng
-    profiles: [full, standard]
-    ports:
-      - "8080:8080"
+    profiles: [standard, full]
 
   mlflow:
+    # Requires an aux DB first: docker compose exec postgres createdb -U codedoc mlflow glitchtip
     image: ghcr.io/mlflow/mlflow:latest
     restart: unless-stopped
-    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "postgresql://${POSTGRES_USER:-codedoc}:${POSTGRES_PASSWORD:-codedoc}@postgres:5432/mlflow"]
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000",
+              "--backend-store-uri",
+              "postgresql://${POSTGRES_USER:-codedoc}:${POSTGRES_PASSWORD:-codedoc}@postgres:5432/mlflow"]
+    env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
-    profiles: [full, standard]
-    ports:
-      - "5000:5000"
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    profiles: [standard, full]
 
   glitchtip:
+    env_file: .env
     image: glitchtip/glitchtip:latest
     restart: unless-stopped
     environment:
@@ -54,9 +55,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    profiles: [full, standard]
-    ports:
-      - "8090:8080"
+    profiles: [standard, full]
 
   openreplay:
     image: openreplay/openreplay:latest
@@ -69,9 +68,7 @@ services:
     command: ["--config=/etc/otel/config.yaml"]
     volumes:
       - ./infra/otel/config.yaml:/etc/otel/config.yaml:ro
-    profiles: [full, standard]
-    ports:
-      - "4317:4317"
+    profiles: [standard, full]
 
   prometheus:
     image: prom/prometheus:latest
@@ -79,9 +76,7 @@ services:
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheusdata:/prometheus
-    profiles: [full, standard]
-    ports:
-      - "9090:9090"
+    profiles: [standard, full]
 
   grafana:
     image: grafana/grafana:latest
@@ -92,9 +87,7 @@ services:
       - grafanadata:/var/lib/grafana
       - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./infra/grafana/datasources.yml:/etc/grafana/provisioning/datasources.yml:ro
-    profiles: [full, standard]
-    ports:
-      - "3001:3000"
+    profiles: [standard, full]
 
   loki:
     image: grafana/loki:latest

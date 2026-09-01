@@ -1,0 +1,66 @@
+name: codedoc
+
+# ============================================================
+# PRODUCTION overrides - use with the base file:
+#
+#   docker compose -f compose.yaml -f compose.prod.yml up -d --build
+#   docker compose --profile full -f compose.yaml -f compose.prod.yml \
+#       -f compose.full.yml up -d
+#
+#   - tagged built images (no source mounts)
+#   - restart: always + health-gated startup
+#   - no dev ports published; serve behind a reverse proxy (see infra/caddy)
+#   - production log level
+# ============================================================
+
+services:
+  postgres:
+    restart: always
+
+  valkey:
+    restart: always
+
+  qdrant:
+    restart: always
+
+  minio:
+    restart: always
+
+  api:
+    image: codedoc/api:latest
+    restart: always
+    environment:
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  worker:
+    image: codedoc/api:latest
+    restart: always
+    environment:
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  web:
+    image: codedoc/web:latest
+    restart: always
+    environment:
+      ENVIRONMENT: production
+    depends_on:
+      api:
+        condition: service_started

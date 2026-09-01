@@ -136,7 +136,7 @@ docker compose --profile full     -f compose.yaml -f compose.prod.yml up -d
 Production checklist:
 
 - Set a strong `SECRET_KEY` and unique DB/MinIO passwords in `.env`.
-- Put the app behind Caddy or Nginx with TLS (example config in `infra/nginx`).
+- Put the app behind Caddy or Nginx with TLS (example config in `infra/caddy`).
 - Point `SENTRY_DSN` at your self-hosted **GlitchTip** (never Sentry cloud).
 - Enforce the demo safety limits (`DEMO_MAX_REPO_MB`, `DEMO_MAX_FILES`, …) on public instances.
 - Back up PostgreSQL (`pg_dump`) — the database is portable by design.

@@ -1,0 +1,36 @@
+# Caddy reverse proxy - TLS termination for production.
+# Replace codedoc.example.com and the two {{env.}} placeholders with your
+# real secrets, then run:  caddy run --config /etc/caddy/Caddyfile
+#
+# Example overlay for compose.prod.yml:
+#
+#   caddy:
+#     image: caddy:2-alpine
+#     restart: always
+#     ports: ["80:80", "443:443"]
+#     volumes:
+#       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+#       - caddydata:/data
+
+codedoc.example.com {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle /health* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		# CSP adjusted as the dashboard matures - do not ship default-open.
+		-X-Server
+	}
+}

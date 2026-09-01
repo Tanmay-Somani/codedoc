@@ -1,0 +1,40 @@
+name: codedoc
+
+# ============================================================
+# DEVELOPMENT overrides - auto-loaded by `docker compose up -d`.
+# Never combine with compose.prod.yml.
+#   - hot-reload server (uvicorn --reload, next dev)
+#   - source directories mounted into containers
+#   - app ports published on localhost
+# ============================================================
+
+services:
+  api:
+    environment:
+      ENVIRONMENT: development
+    volumes:
+      - ./api:/app
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  worker:
+    environment:
+      ENVIRONMENT: development
+    volumes:
+      - ./api:/app
+
+  web:
+    environment:
+      ENVIRONMENT: development
+    volumes:
+      - ./web:/app
+      - webnode_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    command: ["npm", "run", "dev"]
+
+volumes:
+  webnode_modules:

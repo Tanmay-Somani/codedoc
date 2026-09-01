@@ -19,8 +19,8 @@ Legend: **LITE** = core product · **STD** = STANDARD mode · **FULL** = FULL mo
 
 - [x] `compose.yaml` base stack: web, api, worker, postgres, valkey, qdrant, minio (LITE)
 - [x] `docker-compose.full.yml` → renamed/merged into `compose.full.yml` + profiles
-- [ ] **Dev/Prod split:** `compose.override.yaml` (dev: hot reload, mounted sources) and `compose.prod.yml` (prod: built images, no mounts, healthchecks, restart policies)
-- [ ] Reverse proxy (Caddy or Nginx) config in `infra/` with TLS example
+- [x] **Dev/Prod split:** `compose.override.yaml` (dev: hot reload, mounted sources) and `compose.prod.yml` (prod: built images, no mounts, healthchecks, restart policies)
+- [x] Reverse proxy (Caddy) config in `infra/caddy` with TLS example
 - [ ] Prometheus scrape config + Grafana dashboards (API Health, Agent Health, LLM Usage, Vector Search, Worker Queue, Repository Analysis, External API Usage)
 - [ ] Loki + OpenTelemetry collector config in `infra/`
 - [ ] Healthcheck wiring across services (`depends_on: condition: service_healthy`)

@@ -1,12 +1,16 @@
 name: codedoc
 
 # ============================================================
-# AI Codebase Doctor - LITE deployment (default)
+# AI Codebase Doctor - base Compose stack (LITE)
+# Shared services + application containers.
 #
-#   docker compose up -d
+#   Dev:  docker compose up -d            (auto-merges compose.override.yaml)
+#   Prod: docker compose -f compose.yaml -f compose.prod.yml up -d
+#   Full: docker compose -f compose.yaml -f compose.prod.yml \
+#           -f compose.full.yml --profile full up -d
 #
-# Runs: web, api, worker, postgres, valkey, qdrant, minio
-# Designed for ~1-2 GB RAM. Full stack lives in docker-compose.full.yml.
+# App ports are NOT published here; the dev overlay publishes them and prod
+# serves behind a reverse proxy.
 # ============================================================
 
 services:
@@ -24,8 +28,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    ports:
-      - "5432:5432"
 
   valkey:
     image: valkey/valkey:8-alpine
@@ -45,12 +47,10 @@ services:
     volumes:
       - qdrantdata:/qdrant/storage
     healthcheck:
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e 'GET /healthz HTTP/1.0\r\n\r\n' >&3 && cat <&3 | grep -q '200'"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e 'GET /healthz HTTP/1.0\r\n\r\n' >&3 && cat <&3 | grep -q '200'"]
       interval: 10s
       timeout: 5s
       retries: 5
-    ports:
-      - "6333:6333"
 
   minio:
     image: minio/minio:latest
@@ -74,8 +74,6 @@ services:
     build: ./api
     restart: unless-stopped
     env_file: .env
-    environment:
-      ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,28 +84,17 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    volumes:
-      - ./api:/app
-    ports:
-      - "8000:8000"
 
   worker:
     build: ./api
     restart: unless-stopped
     env_file: .env
-    environment:
-      ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
       postgres:
         condition: service_healthy
       valkey:
         condition: service_healthy
-      qdrant:
-        condition: service_healthy
     command: ["python", "-m", "app.worker"]
-    volumes:
-      - ./api:/app
-    profiles: [worker]
 
   web:
     build: ./web
@@ -115,8 +102,6 @@ services:
     env_file: .env
     depends_on:
       - api
-    ports:
-      - "3000:3000"
 
 volumes:
   pgdata:
