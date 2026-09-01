@@ -13,7 +13,9 @@ def test_rate_state_tracks_counts(rate_state):
 
 
 def test_rate_state_tracks_rate_headers(rate_state):
-    rate_state.record("github", ok=True, latency_ms=1.0, rate_remaining=4813, rate_reset_at="2026-09-01T00:00:00Z")
+    rate_state.record(
+        "github", ok=True, latency_ms=1.0, rate_remaining=4813, rate_reset_at="2026-09-01T00:00:00Z"
+    )
     snap = rate_state.snapshot()["github"]
     assert snap["rate_remaining"] == 4813
     assert snap["rate_reset_at"] == "2026-09-01T00:00:00Z"

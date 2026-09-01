@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_deps
+from app.api.deps import Deps, get_deps
 from app.core.logging import get_logger
 from app.core.redaction import redact_text
 from app.models import Analysis, AnalysisStatus, Finding, Repository, User
@@ -33,10 +33,14 @@ async def _current_user(db: AsyncSession) -> User:
 
 
 @router.post("/repositories")
-async def create_repository(payload: RepositoryCreate, deps: dict = Depends(get_deps)) -> dict:
+async def create_repository(
+    payload: RepositoryCreate, deps: Deps = Depends(get_deps)
+) -> dict[str, object]:
     db: AsyncSession = deps["db"]
     user = await _current_user(db)
-    repo = Repository(owner_id=user.id, name=payload.name, url=payload.url, default_branch=payload.default_branch)
+    repo = Repository(
+        owner_id=user.id, name=payload.name, url=payload.url, default_branch=payload.default_branch
+    )
     db.add(repo)
     await db.commit()
     await db.refresh(repo)
@@ -44,7 +48,7 @@ async def create_repository(payload: RepositoryCreate, deps: dict = Depends(get_
 
 
 @router.post("/analyses", response_model=AnalysisOut)
-async def create_analysis(payload: AnalysisCreate, deps: dict = Depends(get_deps)) -> AnalysisOut:
+async def create_analysis(payload: AnalysisCreate, deps: Deps = Depends(get_deps)) -> AnalysisOut:
     db: AsyncSession = deps["db"]
     user = await _current_user(db)
     repo = await db.get(Repository, payload.repository_id)
@@ -67,27 +71,29 @@ async def create_analysis(payload: AnalysisCreate, deps: dict = Depends(get_deps
     await db.commit()
     await db.refresh(analysis)
     logger.info("analysis_created", analysis_id=analysis.id, repository=repo.name)
-    return analysis
+    return AnalysisOut.model_validate(analysis)
 
 
 @router.get("/analyses", response_model=list[AnalysisOut])
-async def list_analyses(deps: dict = Depends(get_deps)) -> list[AnalysisOut]:
+async def list_analyses(deps: Deps = Depends(get_deps)) -> list[AnalysisOut]:
     db: AsyncSession = deps["db"]
     result = await db.execute(select(Analysis).order_by(Analysis.created_at.desc()).limit(50))
-    return list(result.scalars().all())
+    return [AnalysisOut.model_validate(a) for a in result.scalars().all()]
 
 
 @router.get("/analyses/{analysis_id}", response_model=list[AnalysisVulnerabilityOut])
-async def get_analysis_findings(analysis_id: int, deps: dict = Depends(get_deps)) -> list[AnalysisVulnerabilityOut]:
+async def get_analysis_findings(
+    analysis_id: int, deps: Deps = Depends(get_deps)
+) -> list[AnalysisVulnerabilityOut]:
     db: AsyncSession = deps["db"]
     result = await db.execute(
         select(Finding).where(Finding.analysis_id == analysis_id).order_by(Finding.severity)
     )
-    return list(result.scalars().all())
+    return [AnalysisVulnerabilityOut.model_validate(f) for f in result.scalars().all()]
 
 
 @router.post("/analyze")
-async def analyze(payload: AnalyzeRequest, deps: dict = Depends(get_deps)) -> dict:
+async def analyze(payload: AnalyzeRequest, deps: Deps = Depends(get_deps)) -> dict[str, object]:
     """Agent-callable LLM analysis. Content is REDACTED before it leaves the server."""
     registry: Registry = deps["registry"]
     safe_content = redact_text(payload.content)
@@ -98,4 +104,8 @@ async def analyze(payload: AnalyzeRequest, deps: dict = Depends(get_deps)) -> di
         explanation = await registry.llm_complete_with_fallback(prompt)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {"task": payload.task, "redacted": safe_content != payload.content, "explanation": explanation}
+    return {
+        "task": payload.task,
+        "redacted": safe_content != payload.content,
+        "explanation": explanation,
+    }

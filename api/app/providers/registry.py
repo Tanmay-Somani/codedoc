@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import redis.asyncio as aioredis
 
 from app.config import Settings
 from app.core.logging import get_logger
-from app.providers.base import Cache, InMemoryRateLimitState, RateLimitState
-from app.providers.llm import build_llm_providers, GeminiProvider, AnthropicProvider
-from app.providers.package import build_package_provider
+from app.providers.base import Cache, InMemoryRateLimitState, LLMProvider, RateLimitState
+from app.providers.llm import build_llm_providers
 from app.providers.search import build_search_providers
 from app.providers.vectorstore import build_vector_store
 from app.providers.vulnerability import (
@@ -28,7 +29,7 @@ class ValkeyCache(Cache):
         self._client = aioredis.from_url(url, decode_responses=True)
 
     async def get(self, key: str) -> str | None:
-        return await self._client.get(key)
+        return cast(str | None, await self._client.get(key))
 
     async def set(self, key: str, value: str, ttl_seconds: int) -> None:
         await self._client.set(key, value, ex=ttl_seconds)
@@ -54,16 +55,16 @@ class Registry:
         )
 
     @property
-    def active_llm(self):
+    def active_llm(self) -> LLMProvider:
         """Preferred configured LLM provider (default or first available)."""
-        if self.settings.llm_provider == "ollama":
-            return self.llm_providers[0]
         by_name = {getattr(p, "name", "?"): p for p in self.llm_providers}
         if self.settings.llm_provider in by_name:
             return by_name[self.settings.llm_provider]
+        if "openrouter" in by_name:
+            return by_name["openrouter"]
         return self.llm_providers[0]
 
-    async def llm_complete_with_fallback(self, prompt: str, **kwargs) -> str:
+    async def llm_complete_with_fallback(self, prompt: str, **kwargs: Any) -> str:
         """Try providers in order until one succeeds (local → free → paid)."""
         last_error: Exception | None = None
         s = self.settings
@@ -82,7 +83,7 @@ class Registry:
                 last_error = exc
         raise RuntimeError("all LLM providers failed") from last_error
 
-    def integration_status(self) -> dict[str, dict]:
+    def integration_status(self) -> dict[str, dict[str, Any]]:
         """Health info for the Integrations dashboard."""
         llm_names = [p.name for p in self.llm_providers]
         return {

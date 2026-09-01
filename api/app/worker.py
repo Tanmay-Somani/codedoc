@@ -19,10 +19,8 @@ def run_analysis(analysis_id: int) -> None:
 
 
 def main() -> None:
-    dramatiq.set_broker(
-        dramatiq.brokers.redis.RedisBroker(url="redis://valkey:6379/0")
-    )
-    dramatiq.cli.main()  # type: ignore[attr-defined]
+    dramatiq.set_broker(dramatiq.brokers.redis.RedisBroker(url="redis://valkey:6379/0"))
+    dramatiq.cli.main()
 
 
 if __name__ == "__main__":

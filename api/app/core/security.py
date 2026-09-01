@@ -5,10 +5,11 @@ secret. They are decrypted only inside API/worker processes on demand,
 never logged, never returned by any API route, never sent to session replay.
 """
 
+import base64
+
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import base64
 
 _SALT = b"ai-codebase-doctor-fixed-salt"
 
@@ -31,4 +32,6 @@ class KeyVault:
         try:
             return self._fernet.decrypt(ciphertext.encode()).decode()
         except InvalidToken:
-            raise ValueError("Unable to decrypt key material: secret changed or data corrupted")
+            raise ValueError(
+                "Unable to decrypt key material: secret changed or data corrupted"
+            ) from None

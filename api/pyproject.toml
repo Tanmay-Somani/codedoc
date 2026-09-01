@@ -52,6 +52,11 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
 
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's `Depends(...)` in argument defaults is idiomatic.
+"app/api/**" = ["B008"]
+"app/api/deps.py" = ["B008"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

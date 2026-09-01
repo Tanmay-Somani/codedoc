@@ -20,6 +20,6 @@ async def health(registry: Registry = Depends(get_registry)) -> HealthResponse:
 
 
 @router.get("/metrics")
-async def metrics() -> dict:
+async def metrics() -> dict[str, str]:
     """Prometheus metrics summary. Full exposition lives at /metrics in prod."""
     return {"_note": "Prometheus /metrics endpoint is wired via the metrics middleware"}

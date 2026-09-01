@@ -46,7 +46,11 @@ class CrateIoProvider:
             resp = await client.get(f"https://crates.io/api/v1/crates/{package}")
             resp.raise_for_status()
             crate = resp.json().get("crate", {})
-        return {"name": crate.get("name", package), "latest_version": crate.get("max_version"), "description": crate.get("description")}
+        return {
+            "name": crate.get("name", package),
+            "latest_version": crate.get("max_version"),
+            "description": crate.get("description"),
+        }
 
 
 class MavenProvider:
@@ -61,11 +65,15 @@ class MavenProvider:
             resp = await client.get(url)
             resp.raise_for_status()
             doc = resp.json().get("response", {}).get("docs", [{}])[0]
-        return {"name": package, "latest_version": doc.get("latestVersion"), "description": doc.get("description")}
+        return {
+            "name": package,
+            "latest_version": doc.get("latestVersion"),
+            "description": doc.get("description"),
+        }
 
 
-def build_package_provider(ecosystem: str):
-    mapping = {
+def build_package_provider(ecosystem: str) -> Any:
+    mapping: dict[str, Any] = {
         "pypi": PyPIProvider,
         "npm": NpmProvider,
         "crates.io": CrateIoProvider,

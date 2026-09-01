@@ -1,8 +1,10 @@
 """LLM provider implementations + fallback chain.
 
-Fallback order: the user-configured default provider first; if it fails or is
-unconfigured, the registry tries the remaining providers in order so local
-(Ollama) → free → alternative all work without a paid key.
+OpenRouter is the PRIMARY provider: one API key, role-routed models
+(coding → Patch Agent, reasoning → Debug Agent, fast → Summary Agent).
+
+Fallback order (build_llm_providers): openrouter → gemini → groq → anthropic
+→ openai → ollama (ONLY when OLLAMA_ENABLED=true, i.e. FULL/local mode).
 """
 
 from __future__ import annotations
@@ -14,8 +16,55 @@ import httpx
 from app.config import Settings
 from app.providers.base import LLMProvider
 
+MODEL_ROLES = ("coding", "reasoning", "fast")
+
+
+def resolve_role_model(settings: Settings, role: str) -> str:
+    """Return the OpenRouter model id for an agent role."""
+    if role == "coding":
+        return settings.openrouter_model_coding
+    if role == "reasoning":
+        return settings.openrouter_model_reasoning
+    return settings.openrouter_model_fast
+
+
+class OpenRouterProvider:
+    """Primary provider. OpenAI-compatible API with role-routed models."""
+
+    name = "openrouter"
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._url = "https://openrouter.ai/api/v1/chat/completions"
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self._settings.openrouter_api_key}"}
+        if self._settings.environment != "production":
+            headers["HTTP-Referer"] = "http://localhost:3000"
+            headers["X-Title"] = "AI Codebase Doctor"
+        return headers
+
+    async def complete(self, prompt: str, *, model: str | None = None, **kwargs: Any) -> str:
+        if not self._settings.openrouter_api_key:
+            raise RuntimeError("openrouter: no API key configured")
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                self._url,
+                headers=self._headers(),
+                json={
+                    "model": model or self._settings.openrouter_model_fast,
+                    "messages": [{"role": "user", "content": prompt}],
+                    **kwargs,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return str(data["choices"][0]["message"]["content"])
+
 
 class OllamaProvider:
+    """Optional self-hosted local mode (FULL profile, OLLAMA_ENABLED=true)."""
+
     name = "ollama"
 
     def __init__(self, settings: Settings) -> None:
@@ -26,7 +75,11 @@ class OllamaProvider:
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{self.base_url}/api/generate",
-                json={"model": model or self._settings.ollama_model, "prompt": prompt, "stream": False},
+                json={
+                    "model": model or self._settings.ollama_model,
+                    "prompt": prompt,
+                    "stream": False,
+                },
             )
             resp.raise_for_status()
             data = resp.json()
@@ -34,7 +87,7 @@ class OllamaProvider:
 
 
 class OpenAICompatProvider:
-    """OpenAI-compatible chat completions (OpenAI, Groq, OpenRouter)."""
+    """OpenAI-compatible chat completions (OpenAI, Groq)."""
 
     def __init__(self, name: str, base_url: str, api_key: str, default_model: str) -> None:
         self.name = name
@@ -72,7 +125,9 @@ class GeminiProvider:
         if not key:
             raise RuntimeError("gemini: no API key configured")
         model_name = model or self._settings.gemini_model
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        )
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 url,
@@ -115,16 +170,28 @@ class AnthropicProvider:
 
 
 def build_llm_providers(settings: Settings) -> list[LLMProvider]:
-    """Ordered list in fallback order. Local first, then free, then paid."""
-    providers: list[LLMProvider] = [OllamaProvider(settings)]
+    """Ordered fallback chain: OpenRouter first, alternatives as configured,
+    Ollama only when explicitly enabled."""
+    providers: list[LLMProvider] = [OpenRouterProvider(settings)]
     if settings.gemini_api_key:
         providers.append(GeminiProvider(settings))
     if settings.groq_api_key:
-        providers.append(OpenAICompatProvider("groq", "https://api.groq.com/openai/v1", settings.groq_api_key, settings.groq_model))
-    if settings.openrouter_api_key:
-        providers.append(OpenAICompatProvider("openrouter", "https://openrouter.ai/api/v1", settings.openrouter_api_key, settings.openrouter_model))
+        providers.append(
+            OpenAICompatProvider(
+                "groq", "https://api.groq.com/openai/v1", settings.groq_api_key, settings.groq_model
+            )
+        )
     if settings.anthropic_api_key:
         providers.append(AnthropicProvider(settings))
     if settings.openai_api_key:
-        providers.append(OpenAICompatProvider("openai", "https://api.openai.com/v1", settings.openai_api_key, settings.openai_model))
+        providers.append(
+            OpenAICompatProvider(
+                "openai",
+                "https://api.openai.com/v1",
+                settings.openai_api_key,
+                settings.openai_model,
+            )
+        )
+    if settings.ollama_enabled:
+        providers.append(OllamaProvider(settings))
     return providers

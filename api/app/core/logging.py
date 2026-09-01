@@ -1,6 +1,6 @@
 import logging
 import sys
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -29,7 +29,7 @@ def setup_logging(settings: Settings) -> None:
 
 
 def get_logger(name: str = "codedoc") -> structlog.typing.FilteringBoundLogger:
-    return structlog.get_logger(name)
+    return cast(structlog.typing.FilteringBoundLogger, structlog.get_logger(name))
 
 
 def log_redacted(logger: Any, **ctx: Any) -> None:

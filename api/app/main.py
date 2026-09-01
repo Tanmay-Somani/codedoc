@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -14,7 +15,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     setup_logging(settings)
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         registry = Registry(settings)
         app.state.registry = registry
         if settings.sentry_dsn:

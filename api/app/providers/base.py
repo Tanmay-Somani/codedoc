@@ -8,8 +8,9 @@ by :mod:`app.providers.registry`.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 
@@ -52,7 +53,9 @@ class VulnerabilityInfo:
 class VulnerabilityProvider(Protocol):
     name: str
 
-    async def query(self, package: str, version: str, ecosystem: str) -> list[VulnerabilityInfo]: ...
+    async def query(
+        self, package: str, version: str, ecosystem: str
+    ) -> list[VulnerabilityInfo]: ...
 
 
 class PackageProvider(Protocol):
@@ -62,7 +65,9 @@ class PackageProvider(Protocol):
 
 
 class VectorStore(Protocol):
-    async def upsert(self, collection: str, points: list[tuple[str, list[float], dict]]) -> None: ...
+    async def upsert(
+        self, collection: str, points: list[tuple[str, list[float], dict[str, Any]]]
+    ) -> None: ...
 
     async def search(
         self, collection: str, vector: list[float], *, limit: int = 10
@@ -70,7 +75,9 @@ class VectorStore(Protocol):
 
 
 class ObjectStore(Protocol):
-    async def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> None: ...
+    async def put(
+        self, key: str, data: bytes, content_type: str = "application/octet-stream"
+    ) -> None: ...
 
     async def get(self, key: str) -> bytes: ...
 
@@ -116,13 +123,25 @@ class InMemoryRateLimitState(RateLimitState):
         rate_remaining: int | None = None,
         rate_reset_at: str | None = None,
     ) -> None:
-        entry = self._state.setdefault(provider, {"requests": 0, "errors": 0, "latency_sum_ms": 0.0, "cache_hits": 0, "cache_misses": 0, "rate_remaining": None, "rate_reset_at": None, "last_request": None})
+        entry = self._state.setdefault(
+            provider,
+            {
+                "requests": 0,
+                "errors": 0,
+                "latency_sum_ms": 0.0,
+                "cache_hits": 0,
+                "cache_misses": 0,
+                "rate_remaining": None,
+                "rate_reset_at": None,
+                "last_request": None,
+            },
+        )
         entry["requests"] += 1
         if not ok:
             entry["errors"] += 1
         entry["latency_sum_ms"] += latency_ms
         entry["cache_hits" if cache_hit else "cache_misses"] += 1
-        entry["last_request"] = datetime.now(timezone.utc).isoformat()
+        entry["last_request"] = datetime.now(UTC).isoformat()
         if rate_remaining is not None:
             entry["rate_remaining"] = rate_remaining
         if rate_reset_at is not None:
@@ -136,12 +155,15 @@ class CachedProvider:
     """Mixin for providers that cache external results in Valkey."""
 
     cache_prefix = "codedoc:api"
+    name = "base"
 
     def __init__(self, cache: Cache, rate_state: RateLimitState) -> None:
         self._cache = cache
         self._rates = rate_state
 
-    async def _cached_get(self, key: str, ttl_seconds: int, fetcher) -> Any:
+    async def _cached_get(
+        self, key: str, ttl_seconds: int, fetcher: Callable[[], Awaitable[Any]]
+    ) -> Any:
         import json
 
         hit = await self._cache.get(key)

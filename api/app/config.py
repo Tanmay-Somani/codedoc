@@ -34,8 +34,14 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     sentry_traces_sample_rate: float = 0.1
 
-    # LLM providers (user-configured)
-    llm_provider: str = "ollama"
+    # LLM providers (user-configured). OpenRouter is primary; Ollama is
+    # an OPTIONAL local mode behind the FULL profile (OLLAMA_ENABLED=true).
+    llm_provider: str = "openrouter"
+    openrouter_api_key: str = ""
+    openrouter_model_coding: str = "anthropic/claude-sonnet-4"  # Patch Agent
+    openrouter_model_reasoning: str = "deepseek/deepseek-r1"  # Debug Agent
+    openrouter_model_fast: str = "openai/gpt-4o-mini"  # Summary Agent
+    ollama_enabled: bool = False
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "qwen2.5-coder:7b"
     openai_api_key: str = ""
@@ -44,8 +50,6 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-1.5-flash"
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
-    openrouter_api_key: str = ""
-    openrouter_model: str = "deepseek/deepseek-chat"
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-3-5-haiku-latest"
 

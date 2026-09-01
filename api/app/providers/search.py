@@ -31,7 +31,11 @@ class SearXNGProvider:
             resp.raise_for_status()
             raw = resp.json().get("results", [])
         results = [
-            SearchResult(title=str(r.get("title", "")), url=str(r.get("url", "")), snippet=str(r.get("content", "")))
+            SearchResult(
+                title=str(r.get("title", "")),
+                url=str(r.get("url", "")),
+                snippet=str(r.get("content", "")),
+            )
             for r in raw
         ]
         return results[:limit]
@@ -55,7 +59,11 @@ class BraveProvider:
             resp.raise_for_status()
             raw = resp.json().get("web", {}).get("results", [])
         return [
-            SearchResult(title=str(r.get("title", "")), url=str(r.get("url", "")), snippet=str(r.get("description", "")))
+            SearchResult(
+                title=str(r.get("title", "")),
+                url=str(r.get("url", "")),
+                snippet=str(r.get("description", "")),
+            )
             for r in raw
         ]
 

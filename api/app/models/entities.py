@@ -22,14 +22,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
 
-class AnalysisStatus(str, enum.Enum):
+class AnalysisStatus(enum.StrEnum):
     queued = "queued"
     running = "running"
     completed = "completed"
     failed = "failed"
 
 
-class FindingSeverity(str, enum.Enum):
+class FindingSeverity(enum.StrEnum):
     info = "info"
     low = "low"
     medium = "medium"
@@ -89,7 +89,9 @@ class Finding(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     analysis_id: Mapped[int] = mapped_column(ForeignKey("analyses.id"), index=True)
-    tool: Mapped[str] = mapped_column(String(64))  # semgrep|bandit|ruff|mypy|eslint|gitleaks|trivy|dependency
+    tool: Mapped[str] = mapped_column(
+        String(64)
+    )  # semgrep|bandit|ruff|mypy|eslint|gitleaks|trivy|dependency
     rule_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     severity: Mapped[FindingSeverity] = mapped_column(
         Enum(FindingSeverity), default=FindingSeverity.info
