@@ -42,12 +42,12 @@ services:
       retries: 10
 
   qdrant:
-    image: qdrant/qdrant:v1.12
+    image: qdrant/qdrant:v1.12.6
     restart: unless-stopped
     volumes:
       - qdrantdata:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e 'GET /healthz HTTP/1.0\r\n\r\n' >&3 && cat <&3 | grep -q '200'"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:6333/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
