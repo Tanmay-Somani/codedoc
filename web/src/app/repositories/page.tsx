@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBytes, relativeTime } from "@/lib/severity";
-import type { Repository } from "@/lib/types";
+import type { Analysis, Repository } from "@/lib/types";
 
 const container = {
   hidden: { opacity: 0 },
@@ -47,7 +47,7 @@ const item = {
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] },
+    transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
   },
 };
 
@@ -67,18 +67,23 @@ export default function RepositoriesPage() {
     refetchInterval: 5000,
   });
 
-  const activeByRepo = useMemo(() => {
-    const m = new Map<number, boolean>();
+  const activeAnalysisByRepo = useMemo(() => {
+    const m = new Map<number, Analysis>();
     for (const a of analyses.data ?? []) {
-      if (a.status === "queued" || a.status === "running") {
-        m.set(a.repository_id, true);
+      if (
+        (a.status === "queued" || a.status === "running") &&
+        !m.has(a.repository_id)
+      ) {
+        m.set(a.repository_id, a);
       }
     }
     return m;
   }, [analyses.data]);
 
   const sampleRepo = (repos.data ?? []).find((r) => r.is_sample);
-  const sampleActive = sampleRepo ? activeByRepo.get(sampleRepo.id) : false;
+  const sampleActive = sampleRepo
+    ? activeAnalysisByRepo.get(sampleRepo.id)
+    : undefined;
 
   const createRepo = useMutation({
     mutationFn: api.createRepository,
@@ -95,9 +100,9 @@ export default function RepositoriesPage() {
 
   const runAnalysis = useMutation({
     mutationFn: api.createAnalysis,
-    onSuccess: () => {
+    onSuccess: (analysis) => {
       qc.invalidateQueries({ queryKey: ["analyses"] });
-      router.push("/findings");
+      router.push(`/findings?analysis=${analysis.id}`);
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "Failed to start analysis");
@@ -105,8 +110,9 @@ export default function RepositoriesPage() {
   });
 
   const startAnalysis = (repositoryId: number) => {
-    if (activeByRepo.get(repositoryId)) {
-      router.push("/findings");
+    const active = activeAnalysisByRepo.get(repositoryId);
+    if (active) {
+      router.push(`/findings?analysis=${active.id}`);
       return;
     }
     setAnalyzingId(repositoryId);
@@ -120,7 +126,7 @@ export default function RepositoriesPage() {
   const handleSample = () => {
     setError(null);
     if (sampleRepo && sampleActive) {
-      router.push("/findings");
+      router.push(`/findings?analysis=${sampleActive.id}`);
       return;
     }
     if (sampleRepo) {
@@ -308,12 +314,12 @@ export default function RepositoriesPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => startAnalysis(repo.id)}
-                      disabled={analyzingId === repo.id || !!activeByRepo.get(repo.id)}
+                      disabled={analyzingId === repo.id || !!activeAnalysisByRepo.get(repo.id)}
                     >
-                      {analyzingId === repo.id || activeByRepo.get(repo.id) ? (
+                      {analyzingId === repo.id || !!activeAnalysisByRepo.get(repo.id) ? (
                         <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                       ) : null}
-                      {activeByRepo.get(repo.id) ? "Analyzing…" : "Analyze"}
+                      {activeAnalysisByRepo.get(repo.id) ? "Analyzing…" : "Analyze"}
                     </Button>
                     <Button
                       size="sm"

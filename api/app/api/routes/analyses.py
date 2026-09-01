@@ -123,6 +123,42 @@ _SAMPLE_FINDINGS: list[dict[str, object]] = [
 ]
 
 
+async def _persist_findings(
+    db: AsyncSession, analysis_id: int, items: list[dict[str, object]]
+) -> None:
+    """Persist Finding rows (and linked Vulnerability rows) for an analysis."""
+    for item in items:
+        finding = Finding(
+            analysis_id=analysis_id,
+            tool=item["tool"],
+            rule_id=item["rule_id"],
+            severity=item["severity"],
+            file_path=item.get("file_path"),
+            line_start=item.get("line_start"),
+            line_end=item.get("line_end"),
+            message=item["message"],
+            ai_explanation=item.get("ai_explanation"),
+            root_cause=item.get("root_cause"),
+            raw_data=item.get("raw_data"),
+        )
+        db.add(finding)
+        await db.flush()
+        vuln = item.get("vulnerability")
+        if isinstance(vuln, dict):
+            db.add(
+                Vulnerability(
+                    finding_id=finding.id,
+                    source=vuln["source"],
+                    identifier=vuln["identifier"],
+                    summary=vuln.get("summary"),
+                    cvss_score=vuln.get("cvss_score"),
+                    cvss_vector=vuln.get("cvss_vector"),
+                    patched_versions=vuln.get("patched_versions"),
+                    references=vuln.get("references"),
+                )
+            )
+
+
 async def _complete_demo_analysis(
     analysis_id: int, max_repo_mb: int, max_files: int
 ) -> None:
@@ -142,34 +178,7 @@ async def _complete_demo_analysis(
         repo = await db.get(Repository, analysis.repository_id)
         if repo is not None and repo.is_sample:
             analysis.status = AnalysisStatus.completed
-            for item in _SAMPLE_FINDINGS:
-                finding = Finding(
-                    analysis_id=analysis.id,
-                    tool=item["tool"],
-                    rule_id=item["rule_id"],
-                    severity=item["severity"],
-                    file_path=item["file_path"],
-                    line_start=item["line_start"],
-                    line_end=item["line_end"],
-                    message=item["message"],
-                    ai_explanation=item["ai_explanation"],
-                    root_cause=item["root_cause"],
-                )
-                db.add(finding)
-                await db.flush()
-                vuln = item.get("vulnerability")
-                if isinstance(vuln, dict):
-                    db.add(
-                        Vulnerability(
-                            finding_id=finding.id,
-                            source=vuln["source"],
-                            identifier=vuln["identifier"],
-                            summary=vuln.get("summary"),
-                            cvss_score=vuln.get("cvss_score"),
-                            cvss_vector=vuln.get("cvss_vector"),
-                            references=vuln.get("references"),
-                        )
-                    )
+            await _persist_findings(db, analysis.id, _SAMPLE_FINDINGS)
             await db.commit()
             logger.info("analysis_completed", analysis_id=analysis.id)
             return
@@ -190,19 +199,7 @@ async def _complete_demo_analysis(
             logger.warning("analysis_failed", analysis_id=analysis.id, error=str(exc))
             return
         analysis.status = AnalysisStatus.completed
-        for item in scan_results:
-            db.add(
-                Finding(
-                    analysis_id=analysis.id,
-                    tool=item["tool"],
-                    rule_id=item["rule_id"],
-                    severity=item["severity"],
-                    file_path=item["file_path"],
-                    line_start=item["line_start"],
-                    line_end=item["line_end"],
-                    message=item["message"],
-                )
-            )
+        await _persist_findings(db, analysis.id, scan_results)
         await db.commit()
         logger.info("analysis_completed", analysis_id=analysis.id)
 

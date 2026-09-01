@@ -76,6 +76,7 @@ class AnalysisVulnerabilityOut(BaseModel):
     message: str
     ai_explanation: str | None
     root_cause: str | None
+    raw_data: dict[str, object] | None = None
     vulnerability: FindingVulnerabilityOut | None = None
 
     model_config = {"from_attributes": True}

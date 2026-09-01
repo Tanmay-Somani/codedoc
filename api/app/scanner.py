@@ -156,6 +156,23 @@ _VULN_DB: list[dict[str, object]] = [
     {"package": "jszip", "below": "3.8.0", "cve": "CVE-2023-0669", "cvss": 6.1},
 ]
 
+# npm vs pypi (vs maven) classification for the manifest the package lives in;
+# used as display metadata on the dependencies page.
+_ECOSYSTEM: dict[str, str] = {
+    "lodash": "npm",
+    "axios": "npm",
+    "express": "npm",
+    "bootstrap": "npm",
+    "jszip": "npm",
+    "jinja2": "pypi",
+    "requests": "pypi",
+    "urllib3": "pypi",
+    "pillow": "pypi",
+    "django": "pypi",
+    "openpyxl": "pypi",
+    "log4j": "maven",
+}
+
 
 def _version_tuple(version: str) -> tuple[int, ...]:
     nums = re.findall(r"\d+", version) or ["0"]
@@ -287,6 +304,7 @@ def _check_dependencies(root: Path) -> list[dict[str, object]]:
                 continue
             threshold = str(entry["below"])
             if _version_below(version, threshold):
+                identifier = str(entry["cve"])
                 findings.append(
                     {
                         "tool": "dependency",
@@ -297,10 +315,29 @@ def _check_dependencies(root: Path) -> list[dict[str, object]]:
                         "file_path": None,
                         "line_start": None,
                         "line_end": None,
-                        # Message fields get enriched later by agents.
-                        "message": "{pkg} {version} is vulnerable to {cve}".format(
-                            pkg=pkg, version=version, cve=entry["cve"]
-                        ),
+                        "message": f"{pkg} {version} is vulnerable to {identifier}",
+                        "raw_data": {
+                            "package": pkg,
+                            "version": version,
+                            "ecosystem": _ECOSYSTEM.get(pkg, "unknown"),
+                            "identifier": identifier,
+                            "cvss_score": entry["cvss"],
+                            "affected_range": f"< {threshold}",
+                            "fixed_version": threshold,
+                        },
+                        "vulnerability": {
+                            "identifier": identifier,
+                            "source": "osv",
+                            "cvss_score": entry["cvss"],
+                            "summary": (
+                                f"{pkg} {version} is affected; "
+                                f"upgrade to {threshold} or newer"
+                            ),
+                            "patched_versions": [threshold],
+                            "references": [
+                                f"https://nvd.nist.gov/vuln/detail/{identifier}"
+                            ],
+                        },
                     }
                 )
     return findings

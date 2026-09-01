@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: Gauge },
   { href: "/repositories", label: "Repositories", icon: Boxes },
   { href: "/findings", label: "Findings", icon: Radar },
   { href: "/dependencies", label: "Dependencies", icon: ShieldCheck },
@@ -39,7 +40,7 @@ export function AppSidebar({ open, onClose }: { open: boolean; onClose: () => vo
               key={href}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ delay: i * 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
             >
               <Link
                 href={href}

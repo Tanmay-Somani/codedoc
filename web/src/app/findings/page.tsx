@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BrainCircuit,
@@ -27,7 +28,7 @@ import {
   severityStyles,
   SeverityBadge,
 } from "@/lib/severity";
-import type { Finding, Severity } from "@/lib/types";
+import type { Analysis, Finding, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const sampleFindings: Finding[] = [
@@ -114,11 +115,19 @@ const item = {
   show: {
     opacity: 1,
     x: 0,
-    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
   },
 };
 
 export default function FindingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <FindingsExplorer />
+    </Suspense>
+  );
+}
+
+function FindingsExplorer() {
   const analyses = useQuery({
     queryKey: ["analyses"],
     queryFn: api.analyses,
@@ -134,34 +143,58 @@ export default function FindingsPage() {
     [repos.data]
   );
 
-  const latestCompleted = useMemo(
-    () =>
-      (analyses.data ?? []).find((a) => a.status === "completed") ??
-      (analyses.data ?? [])[0],
-    [analyses.data]
-  );
+  const searchParams = useSearchParams();
+  const focusedId = useMemo(() => {
+    const raw = searchParams.get("analysis");
+    const parsed = raw ? Number(raw) : null;
+    return parsed != null && Number.isFinite(parsed) ? parsed : null;
+  }, [searchParams]);
+
+  const active = useMemo(() => {
+    const list = analyses.data ?? [];
+    if (focusedId != null) {
+      const found = list.find((a) => a.id === focusedId);
+      if (found) return found;
+      return {
+        id: focusedId,
+        repository_id: -1,
+        status: "queued",
+        commit_sha: null,
+        error: null,
+        created_at: "",
+        updated_at: "",
+      } as Analysis;
+    }
+    return list[0];
+  }, [analyses.data, focusedId]);
+
+  const scanning =
+    !!active && (active.status === "queued" || active.status === "running");
 
   const findingsQuery = useQuery({
-    queryKey: ["findings", latestCompleted?.id],
-    queryFn: () => api.findings(latestCompleted!.id),
-    enabled: !!latestCompleted,
+    queryKey: ["findings", active?.id],
+    queryFn: () => api.findings(active!.id),
+    enabled: !!active,
   });
 
   const findings: Finding[] = useMemo(() => {
+    if (!active || scanning) return [];
     const liveFindings = findingsQuery.data ?? [];
-    const isSample = latestCompleted
-      ? (repoMap.get(latestCompleted.repository_id)?.is_sample ?? false)
+    const isSample = active
+      ? (repoMap.get(active.repository_id)?.is_sample ?? false)
       : false;
     return liveFindings.length > 0
       ? liveFindings
       : isSample
         ? sampleFindings
         : [];
-  }, [findingsQuery.data, latestCompleted, repoMap]);
+  }, [findingsQuery.data, active, scanning, repoMap]);
 
-  const isSample = latestCompleted
-    ? (repoMap.get(latestCompleted.repository_id)?.is_sample ?? false)
-    : false;
+  const activeRepo =
+    active && active.repository_id >= 0
+      ? repoMap.get(active.repository_id)
+      : undefined;
+  const isSample = activeRepo?.is_sample ?? false;
 
   const filtered = findings.filter((f) => {
     const sevOk = selectedSeverity === "all" || f.severity === selectedSeverity;
@@ -248,20 +281,20 @@ export default function FindingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="max-h-[70vh] space-y-2 overflow-y-auto p-4">
-              {latestCompleted &&
-                !isSample &&
-                (latestCompleted.status === "queued" ||
-                  latestCompleted.status === "running") && (
-                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Scanning repository… results appear automatically.
-                  </p>
-                )}
+              {scanning && (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Scanning {activeRepo ? `“${activeRepo.name}”` : "the repository"}…
+                  results appear automatically.
+                </p>
+              )}
               {filtered.length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">
-                  {isSample
-                    ? "No findings match your filters."
-                    : "No findings for this analysis yet."}
+                  {scanning
+                    ? "Scanning repository… findings will appear here automatically."
+                    : isSample
+                      ? "No findings match your filters."
+                      : "No findings for this analysis yet."}
                 </p>
               ) : (
                 <motion.div variants={container} initial="hidden" animate="show">
@@ -333,7 +366,7 @@ export default function FindingsPage() {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
                     className="space-y-4"
                   >
                     <div className="flex items-center justify-between">

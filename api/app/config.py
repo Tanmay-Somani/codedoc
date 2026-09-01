@@ -26,7 +26,13 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     secret_key: str = "change-me-generate-a-random-string"
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://localhost:8000",
+    ]
 
     # Core services
     database_url: str = "postgresql+asyncpg://codedoc:codedoc@postgres:5432/codedoc"

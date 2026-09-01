@@ -45,6 +45,14 @@ export interface Finding {
   message: string;
   ai_explanation: string | null;
   root_cause: string | null;
+  raw_data?: {
+    package?: string;
+    version?: string;
+    ecosystem?: string;
+    identifier?: string;
+    cvss_score?: number | null;
+    fixed_version?: string | null;
+  } | null;
   vulnerability?: {
     identifier: string;
     source: string;
