@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Deps, get_deps
+from app.api.deps import Deps, db_unavailable, get_deps
 from app.core.logging import get_logger
 from app.core.redaction import redact_text
 from app.models import Analysis, AnalysisStatus, Finding, Repository, User
@@ -13,6 +13,7 @@ from app.schemas import (
     AnalysisVulnerabilityOut,
     AnalyzeRequest,
     RepositoryCreate,
+    RepositoryOut,
 )
 
 logger = get_logger(__name__)
@@ -30,6 +31,21 @@ async def _current_user(db: AsyncSession) -> User:
         await db.commit()
         await db.refresh(user)
     return user
+
+
+@router.get("/repositories", response_model=list[RepositoryOut])
+async def list_repositories(deps: Deps = Depends(get_deps)) -> list[RepositoryOut]:
+    db: AsyncSession = deps["db"]
+    try:
+        result = await db.execute(
+            select(Repository).order_by(Repository.created_at.desc())
+        )
+        return [RepositoryOut.model_validate(r) for r in result.scalars().all()]
+    except Exception as exc:  # noqa: BLE001 - degrade when DB is unreachable
+        if await db_unavailable(exc):
+            logger.warning("db_unavailable_repositories", error=str(exc))
+            return []
+        raise
 
 
 @router.post("/repositories")
@@ -77,8 +93,16 @@ async def create_analysis(payload: AnalysisCreate, deps: Deps = Depends(get_deps
 @router.get("/analyses", response_model=list[AnalysisOut])
 async def list_analyses(deps: Deps = Depends(get_deps)) -> list[AnalysisOut]:
     db: AsyncSession = deps["db"]
-    result = await db.execute(select(Analysis).order_by(Analysis.created_at.desc()).limit(50))
-    return [AnalysisOut.model_validate(a) for a in result.scalars().all()]
+    try:
+        result = await db.execute(
+            select(Analysis).order_by(Analysis.created_at.desc()).limit(50)
+        )
+        return [AnalysisOut.model_validate(a) for a in result.scalars().all()]
+    except Exception as exc:  # noqa: BLE001 - degrade when DB is unreachable
+        if await db_unavailable(exc):
+            logger.warning("db_unavailable_analyses", error=str(exc))
+            return []
+        raise
 
 
 @router.get("/analyses/{analysis_id}", response_model=list[AnalysisVulnerabilityOut])
@@ -86,10 +110,18 @@ async def get_analysis_findings(
     analysis_id: int, deps: Deps = Depends(get_deps)
 ) -> list[AnalysisVulnerabilityOut]:
     db: AsyncSession = deps["db"]
-    result = await db.execute(
-        select(Finding).where(Finding.analysis_id == analysis_id).order_by(Finding.severity)
-    )
-    return [AnalysisVulnerabilityOut.model_validate(f) for f in result.scalars().all()]
+    try:
+        result = await db.execute(
+            select(Finding)
+            .where(Finding.analysis_id == analysis_id)
+            .order_by(Finding.severity)
+        )
+        return [AnalysisVulnerabilityOut.model_validate(f) for f in result.scalars().all()]
+    except Exception as exc:  # noqa: BLE001 - degrade when DB is unreachable
+        if await db_unavailable(exc):
+            logger.warning("db_unavailable_findings", error=str(exc))
+            return []
+        raise
 
 
 @router.post("/analyze")

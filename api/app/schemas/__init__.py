@@ -21,6 +21,20 @@ class RepositoryCreate(BaseModel):
     default_branch: str = "main"
 
 
+class RepositoryOut(BaseModel):
+    id: int
+    name: str
+    url: str | None = None
+    default_branch: str
+    size_bytes: int
+    file_count: int
+    is_sample: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AnalysisCreate(BaseModel):
     repository_id: int
     commit_sha: str | None = None
