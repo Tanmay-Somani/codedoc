@@ -175,6 +175,7 @@ function FindingsExplorer() {
     queryKey: ["findings", active?.id],
     queryFn: () => api.findings(active!.id),
     enabled: !!active,
+    refetchInterval: 5000,
   });
 
   const findings: Finding[] = useMemo(() => {
