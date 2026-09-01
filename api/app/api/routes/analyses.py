@@ -189,7 +189,7 @@ async def _complete_demo_analysis(
             return
 
         try:
-            scan_results = await run_scan(
+            scan_results, file_count, total_bytes = await run_scan(
                 repo.url, repo.default_branch, max_repo_mb, max_files
             )
         except ScanError as exc:
@@ -198,6 +198,8 @@ async def _complete_demo_analysis(
             await db.commit()
             logger.warning("analysis_failed", analysis_id=analysis.id, error=str(exc))
             return
+        repo.size_bytes = total_bytes
+        repo.file_count = file_count
         analysis.status = AnalysisStatus.completed
         await _persist_findings(db, analysis.id, scan_results)
         await db.commit()

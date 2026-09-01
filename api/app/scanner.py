@@ -348,7 +348,12 @@ def _scan_sync(
     branch: str,
     max_repo_mb: int,
     max_files: int,
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], int, int]:
+    """Clone + scan synchronously.
+
+    Returns (findings, file_count, total_bytes) where file_count/total_bytes
+    describe the scanned working tree (skipping .git) for repo metadata.
+    """
     tmp = Path(tempfile.mkdtemp(prefix="codedoc-scan-"))
     try:
         cmd = ["git", "clone", "--depth", "1", "--quiet"]
@@ -407,7 +412,7 @@ def _scan_sync(
             files_scanned=len(files),
             findings=len(findings),
         )
-        return findings
+        return (findings, len(files), total_bytes)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -417,7 +422,7 @@ async def run_scan(
     branch: str,
     max_repo_mb: int,
     max_files: int,
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], int, int]:
     """Clone + scan a repository, returning Finding-shaped dicts.
 
     Runs the blocking clone/scan in a worker thread so the API event loop

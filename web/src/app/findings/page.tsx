@@ -319,8 +319,10 @@ function FindingsExplorer() {
                       : apiDown
                         ? "The backend API is not responding."
                         : isSample
-                          ? "No findings match your filters."
-                          : "No findings for this analysis yet."}
+                           ? "No findings match your filters."
+                           : active?.status === "completed"
+                             ? "Scan completed cleanly — this repository matches no current rules."
+                             : "No findings yet."}
                 </p>
               ) : (
                 <motion.div variants={container} initial="hidden" animate="show">
