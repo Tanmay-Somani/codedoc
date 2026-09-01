@@ -1,0 +1,112 @@
+name: codedoc-full
+
+# ============================================================
+# AI Codebase Doctor - FULL self-hosted deployment
+#
+#   docker compose -f docker-compose.yml -f docker-compose.full.yml up -d
+#
+# Adds: ollama, mlflow, glitchtip, openreplay, prometheus, grafana,
+#       loki, otel-collector, searxng, worker profile, voice/STT.
+#
+# IMPORTANT: The public demo runs LITE only. Do NOT host this whole
+# stack on a tiny free instance - it will become the bottleneck.
+# ============================================================
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollamadata:/root/.ollama
+    profiles: [full]
+    ports:
+      - "11434:11434"
+
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    environment:
+      SEARXNG_BASE_URL: http://searxng:${SEARXNG_PORT:-8080}
+    volumes:
+      - searxngdata:/etc/searxng
+    profiles: [full, standard]
+    ports:
+      - "8080:8080"
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    restart: unless-stopped
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "postgresql://${POSTGRES_USER:-codedoc}:${POSTGRES_PASSWORD:-codedoc}@postgres:5432/mlflow"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: [full, standard]
+    ports:
+      - "5000:5000"
+
+  glitchtip:
+    image: glitchtip/glitchtip:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-codedoc}:${POSTGRES_PASSWORD:-codedoc}@postgres:5432/glitchtip
+      SECRET_KEY: ${SECRET_KEY:-glitchtip-change-me}
+      PORT: "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: [full, standard]
+    ports:
+      - "8090:8080"
+
+  openreplay:
+    image: openreplay/openreplay:latest
+    restart: unless-stopped
+    profiles: [full]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./infra/otel/config.yaml:/etc/otel/config.yaml:ro
+    profiles: [full, standard]
+    ports:
+      - "4317:4317"
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheusdata:/prometheus
+    profiles: [full, standard]
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infra/grafana/datasources.yml:/etc/grafana/provisioning/datasources.yml:ro
+    profiles: [full, standard]
+    ports:
+      - "3001:3000"
+
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - lokidata:/loki
+    profiles: [full]
+
+volumes:
+  ollamadata:
+  searxngdata:
+  prometheusdata:
+  grafanadata:
+  lokidata:
