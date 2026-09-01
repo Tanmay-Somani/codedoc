@@ -321,7 +321,7 @@ function FindingsExplorer() {
                         : isSample
                            ? "No findings match your filters."
                            : active?.status === "completed"
-                             ? "Scan completed cleanly — this repository matches no current rules."
+                             ? "Scan completed — no issues found."
                              : "No findings yet."}
                 </p>
               ) : (
