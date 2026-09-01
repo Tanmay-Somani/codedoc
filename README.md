@@ -182,4 +182,6 @@ documents how each subsystem is built.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Contributions welcome: open an issue or PR.
+MIT — see [LICENSE](LICENSE). 
+
+# Contributions welcome: open an issue or PR.
