@@ -3,14 +3,12 @@ import sys
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.db.base import Base  # noqa: E402
-
 # Import models so autogenerate sees their tables.
 import app.models  # noqa: E402,F401
+from app.db.base import Base  # noqa: E402
 
 config = context.config
 
