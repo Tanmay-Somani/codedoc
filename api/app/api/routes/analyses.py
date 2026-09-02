@@ -88,8 +88,7 @@ _SAMPLE_FINDINGS: list[dict[str, object]] = [
             "encrypted vault."
         ),
         "root_cause": (
-            "Example environment file committed with a placeholder that "
-            "looks like a key."
+            "Example environment file committed with a placeholder that looks like a key."
         ),
     },
     {
@@ -159,9 +158,7 @@ async def _persist_findings(
             )
 
 
-async def _complete_demo_analysis(
-    analysis_id: int, max_repo_mb: int, max_files: int
-) -> None:
+async def _complete_demo_analysis(analysis_id: int, max_repo_mb: int, max_files: int) -> None:
     """Demo stand-in for the scan worker: run the real (LITE) heuristics
     scanner against the repository and persist findings. Sample repositories
     get a seeded, representative result set."""
@@ -222,9 +219,7 @@ async def _current_user(db: AsyncSession) -> User:
 async def list_repositories(deps: Deps = Depends(get_deps)) -> list[RepositoryOut]:
     db: AsyncSession = deps["db"]
     try:
-        result = await db.execute(
-            select(Repository).order_by(Repository.created_at.desc())
-        )
+        result = await db.execute(select(Repository).order_by(Repository.created_at.desc()))
         return [RepositoryOut.model_validate(r) for r in result.scalars().all()]
     except Exception as exc:  # noqa: BLE001 - degrade when DB is unreachable
         if await db_unavailable(exc):
@@ -299,9 +294,7 @@ async def create_analysis(
 async def list_analyses(deps: Deps = Depends(get_deps)) -> list[AnalysisOut]:
     db: AsyncSession = deps["db"]
     try:
-        result = await db.execute(
-            select(Analysis).order_by(Analysis.created_at.desc()).limit(50)
-        )
+        result = await db.execute(select(Analysis).order_by(Analysis.created_at.desc()).limit(50))
         return [AnalysisOut.model_validate(a) for a in result.scalars().all()]
     except Exception as exc:  # noqa: BLE001 - degrade when DB is unreachable
         if await db_unavailable(exc):

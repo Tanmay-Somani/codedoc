@@ -35,7 +35,7 @@ export function useOnboardingTour({
           allowClose: true,
           overlayOpacity: 0.6,
           steps,
-          onDestroy: () => {
+          onDestroyed: () => {
             onCompleteRef.current?.();
           },
         });

@@ -330,13 +330,10 @@ def _check_dependencies(root: Path) -> list[dict[str, object]]:
                             "source": "osv",
                             "cvss_score": entry["cvss"],
                             "summary": (
-                                f"{pkg} {version} is affected; "
-                                f"upgrade to {threshold} or newer"
+                                f"{pkg} {version} is affected; upgrade to {threshold} or newer"
                             ),
                             "patched_versions": [threshold],
-                            "references": [
-                                f"https://nvd.nist.gov/vuln/detail/{identifier}"
-                            ],
+                            "references": [f"https://nvd.nist.gov/vuln/detail/{identifier}"],
                         },
                     }
                 )
@@ -428,6 +425,4 @@ async def run_scan(
     Runs the blocking clone/scan in a worker thread so the API event loop
     stays responsive.
     """
-    return await asyncio.to_thread(
-        _scan_sync, repo_url, branch, max_repo_mb, max_files
-    )
+    return await asyncio.to_thread(_scan_sync, repo_url, branch, max_repo_mb, max_files)

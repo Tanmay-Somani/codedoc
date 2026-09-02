@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,10 +10,19 @@ from app.config import Settings, get_settings
 from app.core.logging import setup_logging
 from app.providers.registry import Registry
 
+log = structlog.get_logger(__name__)
+
+
+def log_settings_warnings(settings: Settings) -> None:
+    for level, message in settings.check_environment():
+        logger = getattr(log, "critical" if level == "critical" else "warning")
+        logger("env_check", issue=message, environment=settings.environment, level=level)
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     setup_logging(settings)
+    log_settings_warnings(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

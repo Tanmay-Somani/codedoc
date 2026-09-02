@@ -5,9 +5,7 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_ENV_FILE = os.getenv(
-    "CODEDOC_ENV_FILE", str(Path(__file__).resolve().parent.parent / ".env")
-)
+_ENV_FILE = os.getenv("CODEDOC_ENV_FILE", str(Path(__file__).resolve().parent.parent / ".env"))
 
 
 class Settings(BaseSettings):
@@ -88,6 +86,61 @@ class Settings(BaseSettings):
 
     # Cryptography key for encrypting user-provided API keys at rest
     fernet_key: str = Field(default="", alias="SECRET_KEY")
+
+    def check_environment(self) -> list[tuple[str, str]]:
+        """Return ``(level, message)`` startup issues.
+
+        ``critical`` entries mean an insecure/unsafe production setup;
+        ``warning`` entries mean a degraded-but-functional configuration.
+        This never raises - it only surfaces problems so the demo can still boot.
+        """
+        issues: list[tuple[str, str]] = []
+        prod = self.environment == "production"
+
+        if self.secret_key in ("", DEFAULT_SECRET_KEY):
+            level = "critical" if prod else "warning"
+            issues.append(
+                (
+                    level,
+                    "SECRET_KEY is unset or the default value; key vault encryption is insecure",
+                )
+            )
+        if self.minio_root_password == DEFAULT_MINIO_PASSWORD:
+            level = "critical" if prod else "warning"
+            issues.append((level, "MinIO root password is the default 'codedoc-minio'"))
+
+        if prod and not self.sentry_dsn:
+            issues.append(("warning", "SENTRY_DSN is empty; error tracking is disabled"))
+
+        for provider, key in (
+            ("openrouter", self.openrouter_api_key),
+            ("openai", self.openai_api_key),
+            ("gemini", self.gemini_api_key),
+            ("groq", self.groq_api_key),
+            ("anthropic", self.anthropic_api_key),
+        ):
+            if self.llm_provider == provider and not key:
+                issues.append(("warning", f"LLM provider '{provider}' has no API key configured"))
+
+        if self.search_provider == "searxng" and not self.searxng_url:
+            issues.append(
+                ("warning", "SearXNG URL is empty; search-based reasoning is unavailable")
+            )
+        for provider, key in (
+            ("tavily", self.tavily_api_key),
+            ("brave", self.brave_api_key),
+            ("serper", self.serper_api_key),
+        ):
+            if self.search_provider == provider and not key:
+                issues.append(
+                    ("warning", f"Search provider '{provider}' has no API key configured")
+                )
+
+        return issues
+
+
+DEFAULT_SECRET_KEY = "change-me-generate-a-random-string"
+DEFAULT_MINIO_PASSWORD = "codedoc-minio"
 
 
 @lru_cache

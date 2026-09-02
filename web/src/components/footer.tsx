@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Compass, Github, HeartHandshake, Package } from "lucide-react";
+import { Compass, GitBranch, HeartHandshake, Package } from "lucide-react";
 import { resetTour } from "@/lib/tour";
 
 export function Footer() {
@@ -42,7 +42,7 @@ export function Footer() {
             rel="noreferrer noopener"
             className="flex items-center gap-1 transition-colors hover:text-foreground"
           >
-            <Github className="h-3.5 w-3.5" />
+            <GitBranch className="h-3.5 w-3.5" />
             GitHub
           </a>
         </p>

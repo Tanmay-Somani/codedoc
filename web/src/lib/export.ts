@@ -8,9 +8,10 @@ const severityColor: Record<Severity, [number, number, number]> = {
   info: [148, 163, 184],
 };
 
-function csvCell(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
+function csvCell(value: string | number): string {
+  const s = String(value);
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
 }
 
 function download(filename: string, content: string, mime: string) {
