@@ -48,6 +48,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...data, url: data.url?.trim() || undefined }),
     }),
+  deleteRepository: (repositoryId: number) =>
+    request<{ id: number; deleted: boolean }>(`/api/repositories/${repositoryId}`, {
+      method: "DELETE",
+    }),
 
   analyses: () => request<Analysis[]>("/api/analyses"),
   createAnalysis: (data: { repository_id: number; commit_sha?: string }) =>

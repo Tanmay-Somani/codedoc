@@ -120,6 +120,7 @@ function RepositoriesExplorer() {
   const [branch, setBranch] = useState("main");
   const [error, setError] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Repository | null>(null);
 
   const repos = useQuery({ queryKey: ["repos"], queryFn: api.repositories });
   const analyses = useQuery({
@@ -206,8 +207,22 @@ function RepositoriesExplorer() {
     );
   };
 
+  const deleteRepo = useMutation({
+    mutationFn: api.deleteRepository,
+    onSuccess: () => {
+      setConfirmDelete(null);
+      qc.invalidateQueries({ queryKey: ["repos"] });
+      qc.invalidateQueries({ queryKey: ["analyses"] });
+      toast.success("Repository deleted");
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Failed to delete repository";
+      toast.error(msg);
+    },
+  });
+
   const handleDelete = (repo: Repository) => {
-    setError("Deleting repositories is not wired to the backend yet.");
+    setConfirmDelete(repo);
   };
 
   return (
@@ -403,6 +418,49 @@ function RepositoriesExplorer() {
             </motion.div>
           ))}
         </motion.div>
+      )}
+
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !deleteRepo.isPending && setConfirmDelete(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 text-base font-medium">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Delete repository?
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This permanently removes{" "}
+              <span className="font-medium text-foreground">{confirmDelete.name}</span>{" "}
+              and all of its analyses and findings. This cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleteRepo.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => deleteRepo.mutate(confirmDelete.id)}
+                disabled={deleteRepo.isPending}
+              >
+                {deleteRepo.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : null}
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </motion.div>
   );

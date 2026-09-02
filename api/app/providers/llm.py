@@ -36,6 +36,7 @@ class OpenRouterProvider:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._url = "https://openrouter.ai/api/v1/chat/completions"
+        self._client = httpx.AsyncClient(timeout=120)
 
     def _headers(self) -> dict[str, str]:
         headers = {"Authorization": f"Bearer {self._settings.openrouter_api_key}"}
@@ -47,19 +48,21 @@ class OpenRouterProvider:
     async def complete(self, prompt: str, *, model: str | None = None, **kwargs: Any) -> str:
         if not self._settings.openrouter_api_key:
             raise RuntimeError("openrouter: no API key configured")
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                self._url,
-                headers=self._headers(),
-                json={
-                    "model": model or self._settings.openrouter_model_fast,
-                    "messages": [{"role": "user", "content": prompt}],
-                    **kwargs,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await self._client.post(
+            self._url,
+            headers=self._headers(),
+            json={
+                "model": model or self._settings.openrouter_model_fast,
+                "messages": [{"role": "user", "content": prompt}],
+                **kwargs,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
         return str(data["choices"][0]["message"]["content"])
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
 
 class OllamaProvider:
@@ -70,20 +73,23 @@ class OllamaProvider:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self.base_url = settings.ollama_base_url
+        self._client = httpx.AsyncClient(timeout=120)
 
     async def complete(self, prompt: str, *, model: str | None = None, **kwargs: Any) -> str:
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                f"{self.base_url}/api/generate",
-                json={
-                    "model": model or self._settings.ollama_model,
-                    "prompt": prompt,
-                    "stream": False,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await self._client.post(
+            f"{self.base_url}/api/generate",
+            json={
+                "model": model or self._settings.ollama_model,
+                "prompt": prompt,
+                "stream": False,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
         return str(data.get("response", ""))
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
 
 class OpenAICompatProvider:
@@ -94,24 +100,27 @@ class OpenAICompatProvider:
         self._base_url = base_url
         self._api_key = api_key
         self._default_model = default_model
+        self._client = httpx.AsyncClient(timeout=120)
 
     async def complete(self, prompt: str, *, model: str | None = None, **kwargs: Any) -> str:
         if not self._api_key:
             raise RuntimeError(f"{self.name}: no API key configured")
         headers = {"Authorization": f"Bearer {self._api_key}"}
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                f"{self._base_url}/chat/completions",
-                headers=headers,
-                json={
-                    "model": model or self._default_model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    **kwargs,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await self._client.post(
+            f"{self._base_url}/chat/completions",
+            headers=headers,
+            json={
+                "model": model or self._default_model,
+                "messages": [{"role": "user", "content": prompt}],
+                **kwargs,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
         return str(data["choices"][0]["message"]["content"])
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
 
 class GeminiProvider:
@@ -119,6 +128,7 @@ class GeminiProvider:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._client = httpx.AsyncClient(timeout=120)
 
     async def complete(self, prompt: str, *, model: str | None = None, **kwargs: Any) -> str:
         key = self._settings.gemini_api_key
@@ -128,15 +138,17 @@ class GeminiProvider:
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         )
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                url,
-                params={"key": key},
-                json={"contents": [{"parts": [{"text": prompt}]}]},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await self._client.post(
+            url,
+            params={"key": key},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+        )
+        resp.raise_for_status()
+        data = resp.json()
         return str(data["candidates"][0]["content"]["parts"][0]["text"])
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
 
 class AnthropicProvider:
@@ -144,29 +156,32 @@ class AnthropicProvider:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._client = httpx.AsyncClient(timeout=120)
 
     async def complete(self, prompt: str, *, model: str | None = None, **kwargs: Any) -> str:
         key = self._settings.anthropic_api_key
         if not key:
             raise RuntimeError("anthropic: no API key configured")
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": model or self._settings.anthropic_model,
-                    "max_tokens": 2000,
-                    "messages": [{"role": "user", "content": prompt}],
-                    **kwargs,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await self._client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": model or self._settings.anthropic_model,
+                "max_tokens": 2000,
+                "messages": [{"role": "user", "content": prompt}],
+                **kwargs,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
         return str(data["content"][0]["text"])
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
 
 def build_llm_providers(settings: Settings) -> list[LLMProvider]:

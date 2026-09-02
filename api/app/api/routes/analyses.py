@@ -1,7 +1,5 @@
-import asyncio
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -10,10 +8,13 @@ from app.api.deps import Deps, db_unavailable, get_deps
 from app.core.logging import get_logger
 from app.core.redaction import redact_text
 from app.models import (
+    AgentRun,
     Analysis,
     AnalysisStatus,
     Finding,
     FindingSeverity,
+    ModelResult,
+    Patch,
     Repository,
     User,
     Vulnerability,
@@ -125,7 +126,13 @@ _SAMPLE_FINDINGS: list[dict[str, object]] = [
 async def _persist_findings(
     db: AsyncSession, analysis_id: int, items: list[dict[str, object]]
 ) -> None:
-    """Persist Finding rows (and linked Vulnerability rows) for an analysis."""
+    """Persist Finding rows (and linked Vulnerability rows) for an analysis.
+
+    Findings are added in bulk and flushed once to backfill generated IDs,
+    then vulnerabilities are added in bulk — a single flush instead of one
+    round-trip per finding.
+    """
+    findings: list[Finding] = []
     for item in items:
         finding = Finding(
             analysis_id=analysis_id,
@@ -140,8 +147,12 @@ async def _persist_findings(
             root_cause=item.get("root_cause"),
             raw_data=item.get("raw_data"),
         )
+        findings.append(finding)
         db.add(finding)
+    if findings:
         await db.flush()
+
+    for finding, item in zip(findings, items, strict=True):
         vuln = item.get("vulnerability")
         if isinstance(vuln, dict):
             db.add(
@@ -162,7 +173,6 @@ async def _complete_demo_analysis(analysis_id: int, max_repo_mb: int, max_files:
     """Demo stand-in for the scan worker: run the real (LITE) heuristics
     scanner against the repository and persist findings. Sample repositories
     get a seeded, representative result set."""
-    await asyncio.sleep(2)
     from app.db.session import async_session
 
     async with async_session() as db:
@@ -216,10 +226,16 @@ async def _current_user(db: AsyncSession) -> User:
 
 
 @router.get("/repositories", response_model=list[RepositoryOut])
-async def list_repositories(deps: Deps = Depends(get_deps)) -> list[RepositoryOut]:
+async def list_repositories(
+    offset: int = 0,
+    limit: int = 100,
+    deps: Deps = Depends(get_deps),
+) -> list[RepositoryOut]:
     db: AsyncSession = deps["db"]
     try:
-        result = await db.execute(select(Repository).order_by(Repository.created_at.desc()))
+        result = await db.execute(
+            select(Repository).order_by(Repository.created_at.desc()).offset(offset).limit(limit)
+        )
         return [RepositoryOut.model_validate(r) for r in result.scalars().all()]
     except Exception as exc:  # noqa: BLE001 - degrade when DB is unreachable
         if await db_unavailable(exc):
@@ -251,6 +267,38 @@ async def create_repository(
         ) from exc
     await db.refresh(repo)
     return {"id": repo.id, "name": repo.name}
+
+
+@router.delete("/repositories/{repository_id}")
+async def delete_repository(
+    repository_id: int, deps: Deps = Depends(get_deps)
+) -> dict[str, object]:
+    db: AsyncSession = deps["db"]
+    user = await _current_user(db)
+    repo = await db.get(Repository, repository_id)
+    if repo is None or repo.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="repository not found")
+
+    # No DB-level ON DELETE CASCADE, so remove dependents explicitly in order.
+    analyses = await db.execute(select(Analysis.id).where(Analysis.repository_id == repo.id))
+    analysis_ids = [row[0] for row in analyses.all()]
+    if analysis_ids:
+        finding_ids_res = await db.execute(
+            select(Finding.id).where(Finding.analysis_id.in_(analysis_ids))
+        )
+        finding_ids = [row[0] for row in finding_ids_res.all()]
+        if finding_ids:
+            await db.execute(delete(Patch).where(Patch.finding_id.in_(finding_ids)))
+            await db.execute(delete(Vulnerability).where(Vulnerability.finding_id.in_(finding_ids)))
+            await db.execute(delete(Finding).where(Finding.id.in_(finding_ids)))
+        await db.execute(delete(AgentRun).where(AgentRun.analysis_id.in_(analysis_ids)))
+        await db.execute(delete(ModelResult).where(ModelResult.analysis_id.in_(analysis_ids)))
+        await db.execute(delete(Analysis).where(Analysis.id.in_(analysis_ids)))
+
+    await db.delete(repo)
+    await db.commit()
+    logger.info("repository_deleted", repository_id=repo.id, name=repo.name)
+    return {"id": repo.id, "deleted": True}
 
 
 @router.post("/analyses", response_model=AnalysisOut)
@@ -291,10 +339,16 @@ async def create_analysis(
 
 
 @router.get("/analyses", response_model=list[AnalysisOut])
-async def list_analyses(deps: Deps = Depends(get_deps)) -> list[AnalysisOut]:
+async def list_analyses(
+    offset: int = 0,
+    limit: int = 50,
+    deps: Deps = Depends(get_deps),
+) -> list[AnalysisOut]:
     db: AsyncSession = deps["db"]
     try:
-        result = await db.execute(select(Analysis).order_by(Analysis.created_at.desc()).limit(50))
+        result = await db.execute(
+            select(Analysis).order_by(Analysis.created_at.desc()).offset(offset).limit(limit)
+        )
         return [AnalysisOut.model_validate(a) for a in result.scalars().all()]
     except Exception as exc:  # noqa: BLE001 - degrade when DB is unreachable
         if await db_unavailable(exc):

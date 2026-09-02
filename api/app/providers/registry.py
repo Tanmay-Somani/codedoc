@@ -94,3 +94,19 @@ class Registry:
             "cache": {"provider": "valkey"},
             "usage": self.rates.snapshot(),
         }
+
+    async def aclose(self) -> None:
+        """Release any persistent HTTP clients held by providers."""
+        for provider in [*self.llm_providers, *self.search_providers]:
+            aclose = getattr(provider, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception:  # noqa: BLE001 - shutdown must not raise
+                    logger.exception(
+                        "provider_shutdown_failed", provider=getattr(provider, "name", "?")
+                    )
+        try:
+            await self.vulnerability_provider.aclose()
+        except Exception:  # noqa: BLE001 - shutdown must not raise
+            logger.exception("vulnerability_shutdown_failed")

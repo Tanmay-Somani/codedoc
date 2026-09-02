@@ -156,6 +156,11 @@ _VULN_DB: list[dict[str, object]] = [
     {"package": "jszip", "below": "3.8.0", "cve": "CVE-2023-0669", "cvss": 6.1},
 ]
 
+# O(1) package -> vuln entry lookup for dependencies (built once at import).
+_VULN_BY_PACKAGE: dict[str, dict[str, object]] = {
+    str(entry["package"]): entry for entry in _VULN_DB
+}
+
 # npm vs pypi (vs maven) classification for the manifest the package lives in;
 # used as display metadata on the dependencies page.
 _ECOSYSTEM: dict[str, str] = {
@@ -184,31 +189,46 @@ def _version_below(version: str, threshold: str) -> bool:
 
 
 def _check_file(relative_path: str, content: str) -> list[dict[str, object]]:
-    """Run static rules over one file, returning findings."""
+    """Run static rules over one file, returning findings.
+
+    Lines are scanned once; every applicable rule is checked against the line
+    in a single pass instead of re-walking the line list per rule.
+    """
     findings: list[dict[str, object]] = []
     lines = content.splitlines()
 
-    for rule_id, message, rule in _SQLI_RULES:
-        for num, line in enumerate(lines, start=1):
+    # SQL injection + unsafe code rules are both tagged as `semgrep`; secret
+    # rules are tagged as `gitleaks`. SQLI/unsafe findings are high/medium but
+    # the message alone signals tool/severity — map rule -> (tool, severity).
+    semgrep_rules: list[tuple[str, str, re.Pattern[str], str]] = [
+        (rule_id, message, rule, "high") for rule_id, message, rule in _SQLI_RULES
+    ]
+    semgrep_rules += [
+        (rule_id, message, rule, severity.value)
+        for rule_id, message, severity, rule in _UNSAFE_CODE_RULES
+    ]
+
+    for num, line in enumerate(lines, start=1):
+        for rule_id, message, rule, severity in semgrep_rules:
             if rule.search(line):
                 findings.append(
                     {
                         "tool": "semgrep",
                         "rule_id": rule_id,
-                        "severity": "high",
+                        "severity": severity,
                         "file_path": relative_path,
                         "line_start": num,
                         "line_end": num,
                         "message": message,
                     }
                 )
-
-    for rule_id, message, severity, rule in _UNSAFE_CODE_RULES:
-        for num, line in enumerate(lines, start=1):
+        for rule_id, message, severity, rule in _SECRET_RULES:
+            if rule_id == "committed-secret-file":
+                continue  # handled against the path below
             if rule.search(line):
                 findings.append(
                     {
-                        "tool": "semgrep",
+                        "tool": "gitleaks",
                         "rule_id": rule_id,
                         "severity": severity.value,
                         "file_path": relative_path,
@@ -220,33 +240,18 @@ def _check_file(relative_path: str, content: str) -> list[dict[str, object]]:
 
     low = relative_path.lower()
     for rule_id, message, severity, rule in _SECRET_RULES:
-        if rule_id == "committed-secret-file":
-            if rule.search(low):
-                findings.append(
-                    {
-                        "tool": "gitleaks",
-                        "rule_id": rule_id,
-                        "severity": severity.value,
-                        "file_path": relative_path,
-                        "line_start": None,
-                        "line_end": None,
-                        "message": message,
-                    }
-                )
-            continue
-        for num, line in enumerate(lines, start=1):
-            if rule.search(line):
-                findings.append(
-                    {
-                        "tool": "gitleaks",
-                        "rule_id": rule_id,
-                        "severity": severity.value,
-                        "file_path": relative_path,
-                        "line_start": num,
-                        "line_end": num,
-                        "message": message,
-                    }
-                )
+        if rule_id == "committed-secret-file" and rule.search(low):
+            findings.append(
+                {
+                    "tool": "gitleaks",
+                    "rule_id": rule_id,
+                    "severity": severity.value,
+                    "file_path": relative_path,
+                    "line_start": None,
+                    "line_end": None,
+                    "message": message,
+                }
+            )
 
     return findings
 
@@ -299,44 +304,43 @@ def _parse_dependencies(root: Path) -> dict[str, str]:
 def _check_dependencies(root: Path) -> list[dict[str, object]]:
     findings: list[dict[str, object]] = []
     for pkg, version in _parse_dependencies(root).items():
-        for entry in _VULN_DB:
-            if entry["package"] != pkg:
-                continue
-            threshold = str(entry["below"])
-            if _version_below(version, threshold):
-                identifier = str(entry["cve"])
-                findings.append(
-                    {
-                        "tool": "dependency",
-                        "rule_id": "known-vulnerable-version",
-                        "severity": "medium"
-                        if float(entry["cvss"]) < 7.0  # type: ignore[arg-type]
-                        else "high",
-                        "file_path": None,
-                        "line_start": None,
-                        "line_end": None,
-                        "message": f"{pkg} {version} is vulnerable to {identifier}",
-                        "raw_data": {
-                            "package": pkg,
-                            "version": version,
-                            "ecosystem": _ECOSYSTEM.get(pkg, "unknown"),
-                            "identifier": identifier,
-                            "cvss_score": entry["cvss"],
-                            "affected_range": f"< {threshold}",
-                            "fixed_version": threshold,
-                        },
-                        "vulnerability": {
-                            "identifier": identifier,
-                            "source": "osv",
-                            "cvss_score": entry["cvss"],
-                            "summary": (
-                                f"{pkg} {version} is affected; upgrade to {threshold} or newer"
-                            ),
-                            "patched_versions": [threshold],
-                            "references": [f"https://nvd.nist.gov/vuln/detail/{identifier}"],
-                        },
-                    }
-                )
+        entry = _VULN_BY_PACKAGE.get(pkg)
+        if entry is None:
+            continue
+        threshold = str(entry["below"])
+        if not _version_below(version, threshold):
+            continue
+        identifier = str(entry["cve"])
+        findings.append(
+            {
+                "tool": "dependency",
+                "rule_id": "known-vulnerable-version",
+                "severity": "medium"
+                if float(entry["cvss"]) < 7.0  # type: ignore[arg-type]
+                else "high",
+                "file_path": None,
+                "line_start": None,
+                "line_end": None,
+                "message": f"{pkg} {version} is vulnerable to {identifier}",
+                "raw_data": {
+                    "package": pkg,
+                    "version": version,
+                    "ecosystem": _ECOSYSTEM.get(pkg, "unknown"),
+                    "identifier": identifier,
+                    "cvss_score": entry["cvss"],
+                    "affected_range": f"< {threshold}",
+                    "fixed_version": threshold,
+                },
+                "vulnerability": {
+                    "identifier": identifier,
+                    "source": "osv",
+                    "cvss_score": entry["cvss"],
+                    "summary": (f"{pkg} {version} is affected; upgrade to {threshold} or newer"),
+                    "patched_versions": [threshold],
+                    "references": [f"https://nvd.nist.gov/vuln/detail/{identifier}"],
+                },
+            }
+        )
     return findings
 
 

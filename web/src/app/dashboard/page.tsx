@@ -108,6 +108,7 @@ export default function DashboardPage() {
     queryKey: ["findings", latestCompleted?.id],
     queryFn: () => api.findings(latestCompleted!.id),
     enabled: !!latestCompleted,
+    refetchInterval: 5000,
   });
   const severityCounts: Record<Severity, number> = useMemo(() => {
     const counts: Record<Severity, number> = {

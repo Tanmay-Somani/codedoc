@@ -40,6 +40,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except Exception:  # noqa: BLE001 - observability must never crash the app
                 pass
         yield
+        try:
+            await registry.aclose()
+        except Exception:  # noqa: BLE001 - shutdown must never crash uvicorn
+            log.warning("registry_shutdown_issue")
 
     app = FastAPI(
         title="AI Codebase Doctor API",

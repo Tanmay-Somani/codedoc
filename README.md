@@ -88,7 +88,7 @@ The public demo runs **LITE** only. Heavy services live behind Compose profiles.
 ### Development
 
 ```bash
-git clone https://github.com/Tanmay-Somani/codedoc
+https://codedoc-ruddy.vercel.app/
 cd codedoc
 cp .env.example .env        # set OPENROUTER_API_KEY (see note below)
 docker compose up -d --build # pulls everything, runs migrations, starts web + api
