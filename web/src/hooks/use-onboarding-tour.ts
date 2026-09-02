@@ -32,6 +32,7 @@ export function useOnboardingTour({
         driver = createDriver({
           showProgress: true,
           animate: true,
+          duration: 900,
           allowClose: false,
           disableActiveInteraction: true,
           smoothScroll: true,
