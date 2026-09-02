@@ -35,7 +35,7 @@ export function useOnboardingTour({
           allowClose: true,
           smoothScroll: true,
           overlayColor: "#0a0f1e",
-          overlayOpacity: 0.72,
+          overlayOpacity: 0.5,
           stagePadding: 6,
           stageRadius: 14,
           popoverClass: "codedoc-tour",

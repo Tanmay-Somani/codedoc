@@ -141,21 +141,6 @@
     0 4px 16px rgb(0 0 0 / 0.4);
 }
 
-.driver-popover.codedoc-tour::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    hsl(var(--primary)),
-    hsl(var(--primary) / 0.15) 45%,
-    transparent 75%
-  );
-}
-
 .driver-popover.codedoc-tour .codedoc-tour-brand {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -260,4 +245,9 @@
     0 0 0 3px hsl(var(--ring)),
     0 0 0 9px hsl(var(--ring) / 0.15),
     0 12px 32px rgb(0 0 0 / 0.45);
+}
+
+.driver-overlay {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
