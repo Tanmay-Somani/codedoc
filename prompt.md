@@ -1,3 +1,28 @@
+> **STATUS — this file is the ORIGINAL master spec (1770 lines), retained as history.**
+> It has been superseded by [`README.md`](README.md), [`tasks.md`](tasks.md), and
+> [`implementations.md`](implementations.md), which are kept in sync with the code ("the code
+> wins"). Do **not** delete this file yet — per its final line and `AGENTS.md`, deletion is gated on
+> `README.md`, `tasks.md`, `implementations.md` and `robot.md` all existing; `robot.md` has not been
+> created yet, so this spec is preserved.
+>
+> Quick current-state map (see `tasks.md` for the live checklist):
+> - **Current runnable product = LITE demo** (`docker compose up -d --build`). Backend: FastAPI +
+>   async SQLAlchemy + Alembic `0001_initial` + structlog JSON + a dependency-light heuristic
+>   scanner (`app/scanner.py`) + OpenRouter role-routed LLM fallback chain. Frontend: Next.js 14 +
+>   TS strict + Tailwind + TanStack Query; pages: `/repositories`, `/findings`, `/dependencies`,
+>   `/integrations`, `/settings`.
+> - **NOT yet implemented** (aspirational, full stack): LangGraph agents (Patch/Debug/Summary),
+>   tree-sitter code graph + embeddings-to-Qdrant, Semgrep/Bandit/Ruff/mypy/ESLint/Trivy scanner
+>   wrappers, live OSV/NVD package-vuln merge pipeline, ML bug-risk models + MLflow tracking,
+>   hybrid BM25+vector RAG reranker, voice (Kokoro/faster-whisper), OpenReplay session replay,
+>   full Prometheus/Grafana/Loki dashboards, GitHub webhook incremental analysis, full authn
+>   (OAuth), and wiring the remaining frontend pages (Dependencies/Settings) to the API.
+> - This session's change: documented an optional `driver.js` guided tour in `README.md` (opt-in,
+>   client-only; not bundled until enabled).
+>
+> The narrative below remains the design intent; where it conflicts with shipped code, the code in
+> `api/` and `web/` wins — fix this file (or `implementations.md`) to match.
+
 Yes. Then the architecture should be designed around **free/open-source/self-hostable components**, with external APIs used where they materially improve capability.
 
 For your specific constraints, I would make these changes:

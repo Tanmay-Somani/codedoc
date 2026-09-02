@@ -1,129 +1,135 @@
 # Implementations — AI Codebase Doctor
 
-Engineering reference for how each subsystem is actually built. Update this file as decisions are
-made. Source of truth is the code; when this file conflicts with code, the code wins — fix the file.
+Engineering reference for how each subsystem is **actually built today**. Principle: "Source of truth
+is the code; when this file conflicts with code, the code wins — fix the file." See `tasks.md` for the
+live backlog.
 
-## Global conventions
+## Current product status
 
-- **Everything runs in Docker Compose.** No dev path requires a paid service.
-- **Providers are interfaces.** New provider = new class implementing the interface + registration
-  in the registry. Fallback chain: OpenRouter → user-configured alternatives → optional local.
-- **OpenRouter is the primary LLM**, one API key routes to many models (free + paid). Models are
-  role-routed: **Patch Agent ← coding model, Debug Agent ← reasoning model, Summary Agent ← fast
-  model** (env `OPENROUTER_MODEL_CODING` / `_REASONING` / `_FAST`).
-- **Secrets:** user-configured API keys are encrypted at rest, decrypted only in-process in the
-  API/worker, never logged, never sent to OpenReplay, never shipped to the browser, never passed
-  to an external LLM until secrets are redacted.
-- **Async workers** do all long work (clone, parse, analyze, ML, agent runs). API enqueues and
-  returns job ids.
+- **Runnable product = LITE.** `docker compose up -d --build` brings up the full demo: a FastAPI
+  backend, a Next.js frontend, and Postgres/Qdrant/Valkey/MinIO containers. With only an
+  `OPENROUTER_API_KEY` the flow works end to end: clone (or use the bundled `sample-repo/`) → LITE
+  heuristic scan (2 s placeholder) → persisted findings → Summary-Agent explanations via OpenRouter.
+- **Phases 4–9 features (LangGraph agents, tree-sitter code graph, ML models, MLflow, voice,
+  OpenReplay, full Grafana/Loki dashboards, GitHub webhooks, OAuth auth, RAG reranker) are
+  aspirational and NOT yet implemented.** They are listed under "Not yet implemented" below.
 
-## Compose topology (dev vs prod)
+## Session change log
+
+- **This session:** documented an opt-in `driver.js` guided tour in `README.md` (client-only; not
+  bundled until `npm i driver.js` + `<GuidedTour />`). No runtime code added.
+
+## Compose topology
 
 | File | Purpose |
 |---|---|
-| `compose.yaml` | Base stack (LITE): postgres, valkey, qdrant, minio, api, worker, web |
-| `compose.override.yaml` | **Development** — auto-loaded by `docker compose up`: source mounts, hot reload, dev ports. Do NOT use in prod |
-| `compose.prod.yml` | **Production** — built images, no source mounts, healthcheck `depends_on`, restart policies, no dev ports |
-| `compose.full.yml` | STANDARD/FULL overlay — heavy/optional services behind `--profile standard` / `--profile full` (ollama, mlflow, glitchtip, openreplay, prometheus, grafana, loki, otel-collector, searxng) |
+| `compose.yaml` | Base stack (LITE): `postgres`, `valkey`, `qdrant`, `minio`, `api`, `worker`, `web`. Runs `alembic upgrade head` on API start. |
+| `compose.override.yaml` | **Dev only** — auto-loaded by `docker compose up`: source mounts, `uvicorn --reload`, `next dev`, ports `8000`/`3000`. Do NOT combine with `compose.prod.yml`. |
+| `compose.prod.yml` | Prod: built images, no mounts, healthchecks, restart policy. |
+| `compose.full.yml` | STANDARD/FULL overlay, behind `--profile standard`/`--profile full` (ollama, mlflow, glitchtip, openreplay, prometheus, grafana, loki, otel-collector, searxng). |
 
-```bash
-docker compose -f compose.yaml -f compose.prod.yml up -d --build     # prod
-docker compose --profile full -f compose.yaml -f compose.prod.yml up -d
-```
+## Backend (`api/`)
 
-Heavy/optional services ALWAYS behind a profile. Public demo runs LITE only. Internal analyzer
-containers are ephemeral sandboxes, not part of the default stack.
+- App factory: `app.main:create_app()`; settings via pydantic-settings from `.env` (`app/config.py`).
+  DB: SQLAlchemy 2.0 async + `asyncpg`; the default `database_url` points at the `postgres` **Docker**
+  host — override to `localhost` when running outside Docker.
+- **Alembic**: one migration `alembic/versions/0001_initial.py` creates all current tables
+  (`users`, `repositories`, `analyses`, `findings`, `vulnerabilities`, `agents`, `model_results`,
+  `patches`, `api_usage`, `config`, `audit_logs`). Auto-applied on container start.
+- Models: `app/models/entities.py` (`TimestampMixin`, `Enum`/`StrEnum` statuses/severities).
+- Logging: `structlog` JSON via `app/core/logging.py`; never logs key material.
+- Secret redaction: `app/core/redaction.py:redact_text()` replaces `sk-…`, GitHub tokens, Google keys,
+  private keys, etc. with `[REDACTED_SECRET]`. This is the REQUIRED gate before any content leaves the
+  sandbox (`POST /api/analyze` calls it before LLM fallback). Unit-tested.
+- Key encryption at rest: `app/core/security.py:KeyVault` (Fernet over `secret_key`). No route
+  currently stores/retrieves keys over HTTP; keys come only from Settings.
 
-## Backend (api/)
+### Routes wired today (`app/api/routes/`)
 
-- FastAPI app factory (`app.main:create_app`); settings from pydantic-settings reading `.env`
-  (see `.env.example`).
-- DB: SQLAlchemy 2.x async + asyncpg; Alembic for migrations; models in `app/models/`, imported
-  into `app/db/base.py` so `autogenerate` sees them.
-- Models (initial): `users`, `repositories`, `analyses`, `findings`, `vulnerabilities`, `agents`,
-  `model_results`, `patches`, `api_usage`, `config`, `audit_logs`. JSONB for flexible fields.
-- Logging: `structlog` JSON; request-id middleware; never log key material — sanitize at source.
-- Secret redaction in `app/core/redaction.py` is a REQUIRED step on repo content before an
-  external LLM call. Unit-tested (OpenAI-style keys, GitHub tokens, PEM blocks).
-- Static analyzers run as internal endpoints `POST /internal/analyze/{tool}` (sandboxed CLI exec);
-  agents call these as tools (no tool shelling directly).
-
-### LLM role routing
-
-`app/providers/llm.py` exposes `build_llm_providers(settings)` and `resolve_role_model(settings, role)`:
-
-| Role | Env var | Default suggestion |
+| Route | Method | Implementation state |
 |---|---|---|
-| `coding` (Patch Agent) | `OPENROUTER_MODEL_CODING` | `anthropic/claude-sonnet-4` |
-| `reasoning` (Debug Agent) | `OPENROUTER_MODEL_REASONING` | `deepseek/deepseek-r1` |
-| `fast` (Summary Agent) | `OPENROUTER_MODEL_FAST` | `openai/gpt-4o-mini` |
+| `/health` | GET | Returns `status`, `version` (Pydantic default `0.1.0`), `services`. |
+| `/api/integrations/status` | GET | Returns LLM provider list + active + usage (flattens only `llm`; nested provider dicts not consumed by UI yet). |
+| `/api/repositories` | GET | Lists repos; degrades to `[]` if DB unavailable. |
+| `/api/repositories` | POST | Creates a repo (dev bootstrap user via `_current_user`). |
+| `/api/analyses` | GET | Latest 50 analyses. |
+| `/api/analyses` | POST | Creates an analysis, enforces `DEMO_MAX_CONCURRENT_PER_USER` (429 if exceeded), enqueues `_complete_demo_analysis` as a `BackgroundTask` (NOT Dramatiq). |
+| `/api/analyses/{id}` | GET | Returns all findings for an analysis (incl. `tool="dependency"`); no server-side tool filter yet. |
+| `/api/analyze` | POST | Redacts the prompt, calls `Registry.llm_complete_with_fallback`, returns the explanation. |
 
-Fallback order in `build_llm_providers`: **openrouter** → gemini → groq → anthropic → openai.
-Ollama is appended ONLY when `OLLAMA_ENABLED=true` (FULL profile, local mode). `Registry.active_llm`
-prefers the configured `LLM_PROVIDER`; `llm_complete_with_fallback` tries each until one succeeds.
+### Demo analysis flow (LITE)
+`_complete_demo_analysis` (in `routes/analyses.py`) is a `BackgroundTask` that:
+1. `await asyncio.sleep(2)` (demo placeholder for the scan worker);
+2. for `is_sample` repos → seeds `_SAMPLE_FINDINGS` (bandit/semgrep/gitleaks/ruff/eslint) + a linked
+   `Vulnerability` where applicable, no git clone;
+3. for URL repos → runs `app/scanner.py:run_scan` (shallow git clone + deterministic regex rules +
+   bundled known-vulnerable-dependency table), persisting `Finding` rows.
 
-### Provider registry (app/providers/)
+Demo safety limits (`DEMO_MAX_REPO_MB=30`, `DEMO_MAX_FILES=1500`, `DEMO_MAX_CONCURRENT_PER_USER=1`)
+are enforced in the scanner and in `POST /api/analyses`. `db_unavailable()` (in `app/api/deps.py`)
+inspects exception names to degrade list/read views to empty when the DB is unreachable.
 
-| Interface | Implementations | Notes |
+### Provider registry (`app/providers/`)
+`Registry` (built once at startup in `lifespan`) holds: `llm_providers`, `search_providers`,
+`vector_store`, `vulnerability_provider` (merged OSV+NVD+GH Advisory), `cache` (Valkey),
+`rates` (in-memory). `llm_complete_with_fallback` tries the chain
+**openrouter → gemini → groq → anthropic → openai → ollama**; note `openai`/`anthropic` are skipped
+in the loop only via the gemini/anthropic key checks — reaching `openai` with no key raises
+`RuntimeError("openai: no API key configured")`.
+
+### What is NOT yet implemented (backend)
+- QueueProvider wiring (Dramatiq/Valkey scaffold in `worker.py` exists but is not used by the API —
+  LITE uses `BackgroundTasks`).
+- Result cache in Valkey; `api_usage` rate-limit persistence (rate tracking is in-memory only).
+- `POST /internal/analyze/{tool}` scanner wrappers; Gitleaks-driven scanning; OSV/NVD live lookups in
+  the scan pipeline (scanner uses a bundled offline `_VULN_DB` only).
+- `/api/config` GET/POST for encrypted provider keys; `POST /repositories/{id}` DELETE.
+- Full authn (currently a dev bootstrap `_current_user`); GitHub OAuth is not wired.
+- OpenTelemetry / Prometheus metrics endpoints; GlitchTip is only DSN-configured, not instrumented.
+
+## Frontend (`web/`)
+
+- Next.js 14 (App Router) + React 18 + TypeScript **strict** + Tailwind 3 (custom CSS variables,
+  dark mode `class`). Component primitives live in `src/components/ui/` (custom, `class-variance-
+  authority`/`tailwind-merge`); not a literal shadcn install.
+- Data: **TanStack Query** (`src/lib/api.ts`, `QueryClient` defaults staleTime 60s, gcTime 300s, retry
+  1, no refetch on focus). **Zustand is NOT present.** `api.baseUrl` = `NEXT_PUBLIC_API_URL`
+  (default `http://localhost:8000`).
+- Pages: `/`, `/repositories`, `/findings`, `/dependencies`, `/integrations`, `/settings`.
+
+### Page wiring reality
+| Page | Backend | Notes |
 |---|---|---|
-| `LLMProvider` | OpenRouterProvider, OllamaProvider(optional), GeminiProvider, GroqProvider, OpenAIProvider, AnthropicProvider | role-routed models; auto-fallback |
-| `EmbeddingProvider` | LocalSentenceTransformersProvider, HFInferenceProvider | CPU-friendly small models |
-| `SearchProvider` | SearXNGProvider, TavilyProvider, BraveProvider, SerperProvider | SearXNG is the free default |
-| `VulnerabilityProvider` | OSVProvider (24h TTL cache), NVDProvider, GitHubAdvisoryProvider | merged, deduped, CVSS-sorted |
-| `PackageProvider` | PyPIProvider, NpmProvider, CrateIoProvider, MavenProvider | |
-| `VectorStore` | QdrantStore, PgVectorStore (pending) | collections: repository_code, documentation, github_issues, commit_history, security_knowledge, external_knowledge |
-| `ObjectStore` | MinIOStore (S3 protocol, pending) | works with R2/B2/S3 unchanged |
-| `QueueProvider` | DramatiqProvider/CeleryProvider over Valkey | actor scaffold exists; wire API → queue → worker |
+| Repositories | Fully wired (`/api/repositories` GET/POST) | "TRY SAMPLE REPOSITORY" flow works. Delete is **not** wired (`handleDelete` is a stub string error). |
+| Findings | Fully wired (`api.analyses` + `api.findings`) | Falls back to `sampleFindings` when the live analysis is a sample with no persisted findings. Shows `ai_explanation`/`root_cause` if persisted; **no Monaco viewer, no live Summary-Agent chat** yet. |
+| Dependencies | **Not wired** — uses a static `dependencies: Dependency[]` mock. The API shape does not yet exist. |
+| Integrations | Partially wired (`api.integrationStatus` + `api.health`) | "Service Status" uses a hardcoded `serviceCatalog` workaround; the backend response nests provider dicts that the page doesn't fully consume. |
+| Settings | **Not wired** — form state only, no GET/POST to an API. Keys are not persisted. |
+| Root `/` | Redirects to `/repositories`. No dashboard. |
 
-Rate-limit manager stores `{provider, remaining, reset_time, current_rate}` (model `api_usage`
-+ Valkey) and surfaces in the Integrations dashboard.
+### What is NOT yet implemented (frontend)
+- Monaco code viewer; React Flow dependency/impact graph (neither is in `package.json`).
+- Live Summary-Agent chat in the Findings panel.
+- API wiring for Dependencies (`/api/dependencies`) and Settings (`GET`/`POST /api/config`).
+- Delete-repository mutation end to end.
 
-## Agents (LangGraph, Phase 5)
+## Analysis engine (actual vs aspirational)
+1. Ingest: `sample-repo/` bundled; URL repos are shallow-cloned in `run_scan`. No archive upload.
+2. Parse: **none** — scanner is line-based regex, not tree-sitter.
+3. Static findings: bundled heuristic rules in `scanner.py` (secrets, SQLi f-string, eval/exec/pickle/
+   shell, hardcoded password/SECRET_KEY). No Semgrep/Bandit/Ruff/ESLint/Trivy wrappers.
+4. Dependency pipeline: `_check_dependencies` checks declared packages against the offline `_VULN_DB`
+   only (no live OSV/NVD lookup).
+5. Enrich/investigate: findings carry a seeded `ai_explanation`/`root_cause` for samples; no agents.
+6. Redaction: applied only at the `POST /api/analyze` LLM gate (redaction module is tested).
 
-| Agent | Model role | Input → Output |
-|---|---|---|
-| **Patch Agent** | coding | finding/root cause → diff → sandbox tests → optional PR |
-| **Debug Agent** | reasoning | bug/failed test → root-cause report |
-| **Summary Agent** | fast | finding → human explanation; chat over RAG context |
-
-All agents share tools: static-analyzer wrapper API, `search_web` (SearXNG), vector search,
-git history. Tool failures and token usage are metrics (`app/providers/...` rate tracking +
-Prometheus).
-
-## Frontend (web/)
-
-- Next.js (App Router) + TS strict + Tailwind + shadcn/ui. State: TanStack Query (server) +
-  Zustand (UI). No Vercel-specific APIs.
-- Key surfaces: Dashboard, Repositories, Findings explorer (Monaco + Summary Agent chat),
-  Dependency report, Integrations/Health, Settings (providers + keys).
-- "TRY SAMPLE REPOSITORY" button posts a special request that uses the bundled `sample-repo/` —
-  no GitHub token needed.
-- OpenReplay records sessions but masking is mandatory for code areas and credential inputs.
-
-## Analysis engine
-
-1. **Ingest:** clone (URL) / upload archive / bundled sample → demo limits → housekeeping.
-2. **Parse:** Tree-sitter per language + universal-ctags symbols → code graph; chunks embedded →
-   vectors in Qdrant (or pgvector).
-3. **Static findings:** Semgrep / Bandit / Ruff / mypy / ESLint / Gitleaks / Trivy → normalized
-   `Finding`.
-4. **Dependency pipeline:** manifest/lock per ecosystem → package metadata → OSV + GitHub Advisory
-   + NVD → merge/dedupe → CVSS → finding.
-5. **Enrich + investigate:** Debug Agent (reasoning) for root cause → Patch Agent (coding) for
-   patch → Summary Agent (fast) writes the human explanation.
-6. **Redaction:** Gitleaks output drives `[REDACTED_SECRET]` in anything leaving the sandbox.
-
-## Voice (FULL)
-
-- `POST /api/voice/synthesize` returns audio from Kokoro 82M (CPU). STT via faster-whisper.
-  Feature-flagged; absence never degrades the app.
+## Voice / Observability (FULL profile, not implemented)
+Kokoro 82M TTS, faster-whisper STT, OpenReplay (with masking), Prometheus/Grafana/Loki dashboards,
+OTel instrumentation — all declared in `prompt.md` but not present in `api/` or `web/` yet.
 
 ## Gotchas / decisions
-
-- GlitchTip uses Sentry-compatible SDKs; `SENTRY_DSN` points at GlitchTip, never Sentry cloud.
-- Valkey, not Redis (licensing).
-- OpenRouter free/cheap models keep the demo viable with one key — but LLM calls still count into
-  rate-limit + cost tracking.
-- pg_dump/pg_restore must work — the DB is portable by design.
-- Demo limits: repo ≤ 30 MB, files ≤ 1,500, 1 concurrent analysis/user, timeout 10 min.
-- Never advertise unlimited processing on the public demo.
+- GlitchTip via Sentry SDKs; `SENTRY_DSN` points at GlitchTip, never Sentry cloud.
+- Valkey (Redis protocol), not Redis.
+- `compose.override.yaml` is auto-loaded by `docker compose up`; never combine with `compose.prod.yml`.
+- `prompt.md` is the original 1770-line spec, retained as history and not deleted until `robot.md`
+  exists (`robot.md` does not exist yet).

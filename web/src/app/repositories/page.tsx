@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Boxes,
@@ -30,6 +30,9 @@ import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBytes, relativeTime } from "@/lib/severity";
 import type { Analysis, Repository } from "@/lib/types";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
+import { markReposVisited, tourDone } from "@/lib/tour";
+import { toast } from "sonner";
 
 const container = {
   hidden: { opacity: 0 },
@@ -54,6 +57,48 @@ const item = {
 export default function RepositoriesPage() {
   const qc = useQueryClient();
   const router = useRouter();
+
+  useOnboardingTour({
+    enabled: !tourDone(),
+    steps: [
+      {
+        popover: {
+          title: "Welcome to CodeDoc",
+          description:
+            "An AI codebase doctor that scans repositories for vulnerabilities, bugs, and dependency risk — then explains each finding with root causes and patch suggestions.",
+          side: "bottom",
+        },
+      },
+      {
+        element: "[data-guide='connect-form']",
+        popover: {
+          title: "Connect a repository",
+          description:
+            "Paste any public Git URL to clone and analyze it. No credentials needed.",
+          side: "bottom",
+        },
+      },
+      {
+        element: "[data-guide='try-sample']",
+        popover: {
+          title: "Try the sample",
+          description:
+            "New here? Click TRY SAMPLE REPOSITORY to instantly scan a known-vulnerable demo repo and see the whole flow in action.",
+          side: "bottom",
+          showButtons: ["next"],
+        },
+      },
+    ],
+  });
+
+  const visitedRef = useRef(false);
+  useEffect(() => {
+    if (!visitedRef.current) {
+      visitedRef.current = true;
+      markReposVisited();
+    }
+  }, []);
+
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("main");
@@ -87,14 +132,17 @@ export default function RepositoriesPage() {
 
   const createRepo = useMutation({
     mutationFn: api.createRepository,
-    onSuccess: () => {
+    onSuccess: (repo) => {
       setName("");
       setUrl("");
       setError(null);
       qc.invalidateQueries({ queryKey: ["repos"] });
+      toast.success(`Added ${repo.name}`);
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to add repository");
+      const msg = err instanceof Error ? err.message : "Failed to add repository";
+      setError(msg);
+      toast.error(msg);
     },
   });
 
@@ -102,10 +150,13 @@ export default function RepositoriesPage() {
     mutationFn: api.createAnalysis,
     onSuccess: (analysis) => {
       qc.invalidateQueries({ queryKey: ["analyses"] });
+      toast.info("Analysis started — you'll be redirected to live findings.");
       router.push(`/findings?analysis=${analysis.id}`);
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to start analysis");
+      const msg = err instanceof Error ? err.message : "Failed to start analysis";
+      setError(msg);
+      toast.error(msg);
     },
   });
 
@@ -156,6 +207,7 @@ export default function RepositoriesPage() {
         <Button
           variant="outline"
           size="sm"
+          data-guide="try-sample"
           onClick={handleSample}
           disabled={createRepo.isPending || runAnalysis.isPending}
         >
@@ -175,7 +227,7 @@ export default function RepositoriesPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1, duration: 0.35 }}
       >
-        <Card className="mb-6">
+        <Card className="mb-6" data-guide="connect-form">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Plus className="h-4 w-4" />

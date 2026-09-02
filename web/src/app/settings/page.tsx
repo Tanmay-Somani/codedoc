@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Bot,
@@ -8,6 +9,7 @@ import {
   EyeOff,
   KeyRound,
   Lock,
+  Map,
   Save,
   ShieldCheck,
 } from "lucide-react";
@@ -23,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
+import { resetTour } from "@/lib/tour";
 
 const llmProviders = [
   {
@@ -66,8 +69,14 @@ const item = {
 };
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [show, setShow] = useState<Record<string, boolean>>({});
   const [values, setValues] = useState<Record<string, string>>({});
+
+  const restartTour = () => {
+    resetTour();
+    router.push("/repositories");
+  };
 
   return (
     <motion.div
@@ -214,6 +223,27 @@ export default function SettingsPage() {
                   </div>
                 );
               })}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={item}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Map className="h-4 w-4 text-primary" />
+                Help
+              </CardTitle>
+              <CardDescription>
+                Replay the interactive onboarding tour that walks you through
+                connecting a repository and scanning the sample.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={restartTour} className="gap-1.5">
+                <Map className="h-4 w-4" />
+                Restart guided tour
+              </Button>
             </CardContent>
           </Card>
         </motion.div>

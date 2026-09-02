@@ -3,111 +3,125 @@
 Working roadmap. Each task is checkable — flip `[ ]` → `[x]` as you complete it. This is the
 canonical backlog; new work gets added here before `implementations.md` is updated.
 
+**Current status:** the runnable product is the **LITE** demo
+(`docker compose up -d --build`). Phases 4–9 and several items below under Phase 3/7/8 are NOT yet
+implemented. See `implementations.md` for the actual-vs-aspirational breakdown.
+
 Legend: **LITE** = core product · **STD** = STANDARD mode · **FULL** = FULL mode.
 
 ## Phase 0 — Repo foundation
 
-- [x] Create README.md, tasks.md, implementations.md, robot.md, prompt.md
 - [x] git init (`main`), `.gitignore`, `.gitattributes`, initial commit, remote `origin`
 - [x] GitHub repo `Tanmay-Somani/codedoc` (public) created + pushed
 - [x] `.env.example` with the full configuration surface documented
 - [x] MIT LICENSE
-- [ ] GitHub Actions CI: backend (ruff, mypy, pytest) + frontend (lint, typecheck, build)
+- [x] README.md (comprehensive), tasks.md, implementations.md
+- [ ] GitHub Actions CI: backend (ruff, mypy, pytest) + frontend (lint, typecheck, build) — **no workflows dir present yet**
 - [ ] Repo topics/description finalization; release tags when milestone ships
+- [ ] `robot.md` does NOT exist yet — keeping it as a Phase 0 deliverable
 
 ## Phase 1 — Infrastructure & Compose
 
 - [x] `compose.yaml` base stack: web, api, worker, postgres, valkey, qdrant, minio (LITE)
-- [x] `docker-compose.full.yml` → renamed/merged into `compose.full.yml` + profiles
-- [x] **Dev/Prod split:** `compose.override.yaml` (dev: hot reload, mounted sources) and `compose.prod.yml` (prod: built images, no mounts, healthchecks, restart policies)
-- [x] Reverse proxy (Caddy) config in `infra/caddy` with TLS example
-- [ ] Prometheus scrape config + Grafana dashboards (API Health, Agent Health, LLM Usage, Vector Search, Worker Queue, Repository Analysis, External API Usage)
-- [ ] Loki + OpenTelemetry collector config in `infra/`
-- [ ] Healthcheck wiring across services (`depends_on: condition: service_healthy`)
+- [x] `compose.full.yml` + profiles (`--profile standard` / `--profile full`)
+- [x] Dev/prod split: `compose.override.yaml` (hot reload, mounted sources, dev ports) and
+      `compose.prod.yml` (built images, no mounts, restart policies)
+- [x] Reverse proxy (Caddy) config in `infra/caddy/Caddyfile` with TLS example
+- [ ] Prometheus scrape config + Grafana dashboards (infra scaffolding exists in
+      `infra/prometheus`, `infra/grafana`; dashboards/metrics targets not finalized)
+- [ ] Loki + OTel collector config (`infra/otel/config.yaml` exists; not wired into app)
+- [ ] Healthcheck wiring across services (compose healthchecks exist on infra services +
+      `depends_on: condition: service_healthy`; api/web have no container healthcheck)
 - [ ] Resource limits per service (maps to LITE/STANDARD/FULL RAM budgets)
+- [x] `sample-repo/` with intentional vulnerabilities (SQLi, hardcoded secret, weak auth) — exists, may grow
+- [x] Demo safety limits enforced (LITE: repo ≤ 30 MB, files ≤ 1,500, 1 concurrent/user, 10 min timeout)
 
 ## Phase 2 — Backend core
 
 - [x] FastAPI app factory + pydantic-settings (`.env`)
-- [x] Structured JSON logging (structlog), request-id middleware
-- [x] SQLAlchemy async engine/session + Alembic (hand-written `0001_initial`)
-- [x] Data model: users, repositories, analyses, findings, vulnerabilities, agents, model_results, patches, api_usage, config, audit_logs
-- [x] `/api/health`, `/api/integrations/status`, skeleton `/metrics`
-- [ ] Demo safety limits middleware (repo size / files / concurrency / timeout) enforced + tested
-- [ ] Authn: local accounts + optional GitHub OAuth; password hashing; replace dev bootstrap user
+- [x] Structured JSON logging (structlog), request-id ready
+- [x] SQLAlchemy async engine/session + Alembic (`0001_initial`)
+- [x] ORM model surface: users, repositories, analyses, findings, vulnerabilities, agents,
+      model_results, patches, api_usage, config, audit_logs
+- [x] `/health` (with `version`), `/api/integrations/status`, skeleton `/metrics`
+- [x] Demo analysis flow via `BackgroundTasks` + 2 s placeholder (NOT Dramatiq for LITE)
+- [ ] Demo safety limits **unit-tested** (enforced in code; no dedicated tests)
+- [ ] Authn: local accounts + GitHub OAuth; password hashing; replace dev bootstrap user
 
 ## Phase 3 — Provider abstractions
 
-- [x] Interfaces: `LLMProvider`, `SearchProvider`, `VulnerabilityProvider`, `PackageProvider`, `VectorStore`, `ObjectStore`, `QueueProvider`, `Cache`, rate-limit tracking
-- [x] **OpenRouter first** (`OpenRouterProvider`, chat-completions compatible) with **3 role models** driven by agent: `OPENROUTER_MODEL_CODING` / `_REASONING` / `_FAST`
-- [x] Fallback chain: OpenRouter → (user-configured) Gemini / Groq / OpenAI / Anthropic; **Ollama optional** (FULL profile only, `OLLAMA_ENABLED=true`)
-- [x] `EmbeddingProvider`: local sentence-transformers (CPU); HF inference optional
+- [x] Interfaces: `LLMProvider`, `EmbeddingProvider`, `SearchProvider`, `VulnerabilityProvider`,
+      `PackageProvider`, `VectorStore`, `ObjectStore`, `Cache`, `RateLimitState` (Protocols in base.py)
+- [x] OpenRouter primary with 3 role models (`OPENROUTER_MODEL_CODING/REASONING/FAST`)
+- [x] Fallback chain: OpenRouter → (user-configured) Gemini / Groq / Anthropic / OpenAI; Ollama
+      optional (FULL only, `OLLAMA_ENABLED=true`)
+- [ ] `EmbeddingProvider` impl (interface only; no local sentence-transformers implementation wired)
 - [x] `SearchProvider`: SearXNG default; Tavily/Brave/Serper optional
-- [x] `VulnerabilityProvider`: OSV (24h TTL cache) + NVD + GitHubAdvisory → merged, deduped, CVSS-sorted
-- [x] `PackageProvider`: PyPI, npm, crates.io, Maven
-- [x] `VectorStore`: Qdrant store; pgvector store behind same interface (implementation pending)
-- [ ] `ObjectStore`: MinIO S3-store implementation
-- [ ] `QueueProvider`: Dramatiq/Celery over Valkey (actor scaffold exists; wire into API)
-- [ ] API result cache (Valkey) verified end-to-end + rate-limit manager persisted in `api_usage`
-- [ ] Encrypted API-key storage via `KeyVault`; keys never logged / replayed / bundled
+- [x] `VulnerabilityProvider`: OSV (cached, in-memory) + NVD + GitHub Advisory → merged/deduped/CVSS-sorted
+- [ ] `PackageProvider` wired into Registry (implementations exist in `package.py`; not registered)
+- [x] `VectorStore`: Qdrant store; pgvector store (pending)
+- [ ] `ObjectStore`: MinIO/S3 implementation
+- [ ] `QueueProvider`: Dramatiq/Celery over Valkey (scaffold in `worker.py`; not wired to API)
+- [ ] API result cache in Valkey + `api_usage` rate-limit persistence (rate tracking is in-memory)
+- [ ] Encrypted API-key storage via `KeyVault` exposed over HTTP (`/api/config` GET/POST not yet wired)
 
 ## Phase 4 — Analysis engine
 
-- [ ] Repository ingestion: clone/archive → housekeeping → parse; enforcement of demo limits
-- [ ] Tree-sitter / AST / universal-ctags parsing → code graph + embeddings → Qdrant collections (`repository_code`, `documentation`, `github_issues`, `commit_history`, `security_knowledge`, `external_knowledge`)
-- [ ] Static analyzer wrappers: `POST /internal/analyze/{semgrep,bandit,ruff,mypy,eslint,gitleaks,trivy}` (sandboxed CLI exec)
-- [ ] Gitleaks integration + redaction gate before any external LLM call (redaction core exists + tested)
-- [ ] Dependency parser per ecosystem → package metadata → OSV + NVD + Advisory merge pipeline
-- [ ] Vulnerability classifier + bug-risk ML models (small, CPU-runnable); MLflow tracking
-- [ ] RAG: hybrid BM25 + vector + rerank
+- [ ] Repository ingestion: clone/archive → housekeeping → demo-limit enforcement (clone exists for URL repos; no archive upload)
+- [ ] Tree-sitter / AST / Universal Ctags parsing → code graph + embeddings → Qdrant collections (not implemented; scanner is regex-based)
+- [ ] Static analyzer wrappers: `POST /internal/analyze/{semgrep,bandit,ruff,mypy,eslint,gitleaks,trivy}`
+- [ ] Gitleaks integration + redaction gate (redaction core exists + tested; no Gitleaks scan yet)
+- [ ] Dependency parser per ecosystem → package metadata → OSV + NVD + Advisory merge pipeline (offline bundled `_VULN_DB` only)
+- [ ] Vulnerability/classification + bug-risk ML models; MLflow tracking (not implemented)
+- [ ] RAG: hybrid BM25 + vector + rerank (not implemented)
 
-## Phase 5 — Agents (LangGraph, OpenRouter role-routed)
+## Phase 5 — Agents (LangGraph, role-routed)
 
-- [ ] **Patch Agent** (coding model): root cause → diff → sandbox tests → optional GitHub PR
-- [ ] **Debug Agent** (reasoning model): bug/failed-test investigation → root cause report
-- [ ] **Summary Agent** (fast model): finding triage, human explanations, chat over RAG context
-- [ ] Shared tools: `search_web` (SearXNG) — never blindly copy SO answers
-- [ ] Agent tool wrappers over static analyzers; tool-failure observability (Prometheus + OTel)
+- [ ] Patch Agent (coding), Debug Agent (reasoning), Summary Agent (fast) — not implemented; only
+      role-routed provider selection exists today
+- [ ] Shared agent tools: `search_web`, static-analyzer wrappers, vector search
+- [ ] Agent tool-failure observability (Prometheus + OTel)
 
 ## Phase 6 — Webhook & incremental
 
 - [ ] GitHub webhook receiver: push / PR / issues / release / workflow_run → queued incremental analysis
-- [ ] Rate-limit awareness on webhook-triggered jobs
 
 ## Phase 7 — Frontend (LITE)
 
-- [ ] Next.js scaffold: TS strict + Tailwind + shadcn/ui + TanStack Query + Zustand
-- [ ] Dashboard: repo list, analyses, findings, Integrations/health panel
-- [ ] Analysis flow: connect repo **or** "TRY SAMPLE REPOSITORY" (no GitHub needed)
-- [ ] Findings explorer: Monaco viewer, severity/CVSS, AI explanation panel (Summary Agent chat)
-- [ ] Dependency security report view
-- [ ] Settings: provider toggles + encrypted API keys (never shipped to the client)
-- [ ] React Flow dependency/impact graph; Recharts metrics
-- [ ] No Vercel-specific APIs; export-or-self-host compatible
+- [x] Next.js scaffold: TS strict + Tailwind + custom ui/ + TanStack Query (no Zustand, no shadcn install, no Monaco, no React Flow)
+- [ ] Dashboard home page (root currently redirects straight to `/repositories`)
+- [x] Analysis flow: connect repo **or** "TRY SAMPLE REPOSITORY" (no GitHub needed)
+- [ ] Findings explorer: Monaco viewer + Summary-Agent chat (findings list works; no Monaco, no live chat)
+- [ ] Dependency security report view — **API-wired** (currently static mock; add `GET /api/dependencies`)
+- [ ] Settings: provider toggles + encrypted API keys — **API-wired** (currently form-only; add `GET/POST /api/config`)
+- [ ] Delete-repository end-to-end (backend DELETE + frontend mutation)
+- [ ] React Flow dependency/impact graph; Recharts metrics (Recharts present & used; React Flow not added)
+- [x] No Vercel-specific APIs; self-host / standalone-output compatible
+- [x] **driver.js** guided tour documented in README.md (opt-in, client-only; not bundled by default)
 
 ## Phase 8 — Observability
 
-- [ ] OTel instrumentation: FastAPI, workers, Postgres, Qdrant, external APIs, LLM calls, agent tools
-- [ ] Sentry SDKs (web/worker/api) with DSN → **GlitchTip**
-- [ ] OpenReplay integration with masking of secrets/source sections
-- [ ] `/metrics`: LLM latency/tokens per role, RAG retrieval time, queue size, active workers
+- [ ] OTel instrumentation (FastAPI, Postgres, Qdrant, external APIs, LLM calls, agent tools)
+- [ ] Sentry SDKs (DSN → GlitchTip); GlitchTip configured, not instrumented in code
+- [ ] OpenReplay integration with secret/source masking
+- [ ] `/metrics`: LLM latency/tokens per role, RAG time, queue size, external usage
 
 ## Phase 9 — Voice (FULL, optional)
 
-- [ ] `POST /api/voice/synthesize` → Kokoro 82M TTS (CPU)
-- [ ] STT via faster-whisper / whisper.cpp; voice never blocks the main app (feature-flagged)
+- [ ] `POST /api/voice/synthesize` → Kokoro 82M TTS (CPU); STT via faster-whisper (feature-flagged)
 
 ## Phase 10 — Demo hardening
 
-- [ ] `sample-repo/` with intentional vulnerabilities (SQLi, bad JWT, hardcoded creds, path traversal, command injection, weak crypto, missing validation)
-- [ ] Public demo deploy = LITE only; safety limits enforced everywhere
-- [ ] `compose.full.yml` documented as the recruiter/dev full-local-stack option
+- [x] `sample-repo/` with intentional vulnerabilities
+- [x] LITE-only public demo; safety limits enforced everywhere
+- [x] `compose.full.yml` as the full-local-stack option
 
 ## Phase 11 — Tests & polish
 
-- [x] Backend pytest: redaction, rate-limit tracking
-- [ ] Backend pytest: providers (mocked HTTP via respx), dependency pipeline, cache TTL
+- [x] Backend pytest: redaction, rate-limit tracking (pure-logic, no DB)
+- [ ] Backend pytest: providers (mocked HTTP via respx), dependency pipeline shape, cache TTL
+- [ ] Backend pytest: route-level tests (`ASGITransport` + in-memory DB override) for dependencies/config/analyze redaction
 - [ ] Frontend component smoke tests + CI typecheck
-- [ ] E2E: sample repo → analysis → findings rendered
+- [ ] E2E: sample repo → analysis → findings rendered in UI
 - [ ] Final README wiring diagram + screenshots
-- [ ] Archive `prompt.md` → git history (superseded by README/planning docs)
+- [ ] Delete `prompt.md` once `README.md`, `tasks.md`, `implementations.md` and `robot.md` exist (robot.md pending)

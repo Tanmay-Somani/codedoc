@@ -28,7 +28,7 @@ export function AppSidebar({ open, onClose }: { open: boolean; onClose: () => vo
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-border/50 bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-out-expo",
+        "fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-border/50 bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-out-expo lg:translate-x-0",
         open ? "translate-x-0" : "-translate-x-full"
       )}
     >
