@@ -123,3 +123,141 @@
     @apply flex h-2 w-full overflow-hidden rounded-full bg-muted;
   }
 }
+
+/* ===== driver.js guided-tour theme (dark clinical, teal accents) ===== */
+.driver-popover.codedoc-tour {
+  --tour-bg: hsl(var(--card));
+  background: var(--tour-bg);
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  min-width: 280px;
+  max-width: 320px;
+  padding: 18px 18px 14px;
+  font-family: var(--font-sans);
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.16),
+    0 16px 48px rgb(0 0 0 / 0.6),
+    0 4px 16px rgb(0 0 0 / 0.4);
+}
+
+.driver-popover.codedoc-tour::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary)),
+    hsl(var(--primary) / 0.15) 45%,
+    transparent 75%
+  );
+}
+
+.driver-popover.codedoc-tour .codedoc-tour-brand {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+  margin-bottom: 8px;
+  user-select: none;
+}
+
+.driver-popover.codedoc-tour .driver-popover-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: hsl(var(--foreground));
+  padding-right: 26px;
+}
+
+.driver-popover.codedoc-tour .driver-popover-description {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: hsl(var(--muted-foreground));
+  max-width: 55ch;
+}
+
+.driver-popover.codedoc-tour .driver-popover-progress-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: hsl(var(--muted-foreground));
+}
+
+.driver-popover.codedoc-tour .driver-popover-close-btn {
+  color: hsl(var(--muted-foreground));
+  font-size: 22px;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  transition: color 0.15s ease;
+}
+
+.driver-popover.codedoc-tour .driver-popover-close-btn:hover,
+.driver-popover.codedoc-tour .driver-popover-close-btn:focus {
+  color: hsl(var(--foreground));
+}
+
+.driver-popover.codedoc-tour .driver-popover-footer {
+  margin-top: 16px;
+}
+
+.driver-popover.codedoc-tour .driver-popover-footer-btn {
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: hsl(var(--secondary-foreground));
+  background: hsl(var(--secondary));
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.driver-popover.codedoc-tour .driver-popover-footer-btn:hover,
+.driver-popover.codedoc-tour .driver-popover-footer-btn:focus {
+  background: hsl(216 30% 18%);
+}
+
+.driver-popover.codedoc-tour .driver-popover-next-btn {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.driver-popover.codedoc-tour .driver-popover-next-btn:hover,
+.driver-popover.codedoc-tour .driver-popover-next-btn:focus {
+  background: hsl(187 90% 48%);
+}
+
+.driver-popover.codedoc-tour .driver-popover-arrow-side-left {
+  border-left-color: var(--tour-bg);
+}
+
+.driver-popover.codedoc-tour .driver-popover-arrow-side-right {
+  border-right-color: var(--tour-bg);
+}
+
+.driver-popover.codedoc-tour .driver-popover-arrow-side-top {
+  border-top-color: var(--tour-bg);
+}
+
+.driver-popover.codedoc-tour .driver-popover-arrow-side-bottom {
+  border-bottom-color: var(--tour-bg);
+}
+
+.driver-active .driver-active-element {
+  box-shadow:
+    0 0 0 3px hsl(var(--ring)),
+    0 0 0 9px hsl(var(--ring) / 0.15),
+    0 12px 32px rgb(0 0 0 / 0.45);
+}

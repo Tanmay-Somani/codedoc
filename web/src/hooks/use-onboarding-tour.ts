@@ -33,8 +33,23 @@ export function useOnboardingTour({
           showProgress: true,
           animate: true,
           allowClose: true,
-          overlayOpacity: 0.6,
+          smoothScroll: true,
+          overlayColor: "#0a0f1e",
+          overlayOpacity: 0.72,
+          stagePadding: 6,
+          stageRadius: 14,
+          popoverClass: "codedoc-tour",
+          nextBtnText: "Continue",
+          prevBtnText: "Back",
+          doneBtnText: "Done",
           steps,
+          onPopoverRender: (popover) => {
+            if (popover.wrapper.querySelector(".codedoc-tour-brand")) return;
+            const brand = document.createElement("div");
+            brand.className = "codedoc-tour-brand";
+            brand.textContent = "CODEDOC // TOUR";
+            popover.wrapper.insertBefore(brand, popover.title);
+          },
           onDestroyed: () => {
             onCompleteRef.current?.();
           },
