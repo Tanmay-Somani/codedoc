@@ -22,8 +22,11 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CodeDoc - AI Codebase Doctor",
+  title: "CodeDoc",
   description: "Self-hostable AI codebase diagnosis, findings, and dependency risk",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
