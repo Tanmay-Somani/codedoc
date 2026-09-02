@@ -75,7 +75,7 @@ export default function SettingsPage() {
 
   const restartTour = () => {
     resetTour();
-    router.push("/repositories");
+    router.push("/repositories?tour=1");
   };
 
   return (

@@ -10,11 +10,11 @@ export function Footer() {
 
   const startTour = () => {
     resetTour();
-    router.push("/repositories");
+    router.push("/repositories?tour=1");
   };
 
   return (
-    <footer className="mx-auto mt-12 max-w-6xl px-6 pb-8">
+    <footer className="mx-auto mt-14 max-w-6xl px-6 pb-16">
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-6 text-xs text-muted-foreground">
         <p className="flex items-center gap-1.5">
           <Package className="h-3.5 w-3.5" />

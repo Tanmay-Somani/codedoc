@@ -18,7 +18,6 @@ export function useOnboardingTour({
 
   useEffect(() => {
     if (!enabled || ran.current) return;
-    ran.current = true;
 
     let cancelled = false;
     let driver: Driver | null = null;
@@ -39,9 +38,12 @@ export function useOnboardingTour({
             onCompleteRef.current?.();
           },
         });
+        // Mark as started only right before driving so React StrictMode's
+        // dev double-mount (mount → cleanup → mount) doesn't consume the flag.
+        ran.current = true;
         driver.drive();
-      } catch {
-        /* tour is non-critical — never crash the page */
+      } catch (err) {
+        console.warn("Guided tour failed to start:", err);
       }
     }, 700);
 

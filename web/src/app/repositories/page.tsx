@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Boxes,
@@ -55,11 +55,21 @@ const item = {
 };
 
 export default function RepositoriesPage() {
+  return (
+    <Suspense fallback={null}>
+      <RepositoriesExplorer />
+    </Suspense>
+  );
+}
+
+function RepositoriesExplorer() {
   const qc = useQueryClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const forceTour = searchParams.get("tour") === "1";
 
   useOnboardingTour({
-    enabled: !tourDone(),
+    enabled: !tourDone() || forceTour,
     steps: [
       {
         popover: {
