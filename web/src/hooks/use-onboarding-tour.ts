@@ -23,45 +23,11 @@ export function useOnboardingTour({
 
     let cancelled = false;
     let driver: Driver | null = null;
-    let blurEl: HTMLDivElement | null = null;
-
-    const removeBlur = () => {
-      blurEl?.remove();
-      blurEl = null;
-    };
-
-    const syncBlur = (element: Element | undefined) => {
-      if (!blurEl) return;
-      if (!element) {
-        blurEl.style.webkitMaskImage = "none";
-        blurEl.style.maskImage = "none";
-        return;
-      }
-      const pad = 16;
-      const rect = element.getBoundingClientRect();
-      const x = Math.max(0, Math.round(rect.left - pad));
-      const y = Math.max(0, Math.round(rect.top - pad));
-      const w = Math.min(rect.width + pad * 2, window.innerWidth - x);
-      const h = Math.min(rect.height + pad * 2, window.innerHeight - y);
-      const svg =
-        `<svg xmlns="http://www.w3.org/2000/svg" ` +
-        `width="${window.innerWidth}" height="${window.innerHeight}">` +
-        `<rect width="100%" height="100%" fill="#fff"/>` +
-        `<rect x="${x}" y="${y}" width="${Math.max(0, w)}" height="${Math.max(0, h)}" fill="#000"/>` +
-        `</svg>`;
-      const url = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
-      blurEl.style.webkitMaskImage = url;
-      blurEl.style.maskImage = url;
-    };
 
     const timeout = setTimeout(async () => {
       try {
         const { driver: createDriver } = await import("driver.js");
         if (cancelled) return;
-
-        blurEl = document.createElement("div");
-        blurEl.className = "codedoc-tour-blur";
-        document.body.appendChild(blurEl);
 
         driver = createDriver({
           showProgress: true,
@@ -70,16 +36,13 @@ export function useOnboardingTour({
           smoothScroll: true,
           overlayColor: "#0a0f1e",
           overlayOpacity: 0.5,
-          stagePadding: 16,
+          stagePadding: 6,
           stageRadius: 14,
           popoverClass: "codedoc-tour",
           nextBtnText: "Continue",
           prevBtnText: "Back",
           doneBtnText: "Done",
           steps,
-          onHighlighted: (element) => {
-            syncBlur(element);
-          },
           onPopoverRender: (popover) => {
             if (popover.wrapper.querySelector(".codedoc-tour-brand")) return;
             const brand = document.createElement("div");
@@ -88,7 +51,6 @@ export function useOnboardingTour({
             popover.wrapper.insertBefore(brand, popover.title);
           },
           onDestroyed: () => {
-            removeBlur();
             onCompleteRef.current?.();
           },
         });
@@ -109,7 +71,6 @@ export function useOnboardingTour({
       } catch {
         /* ignore */
       }
-      removeBlur();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, steps]);

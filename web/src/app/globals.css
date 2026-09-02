@@ -246,16 +246,3 @@
     0 0 0 9px hsl(var(--ring) / 0.15),
     0 12px 32px rgb(0 0 0 / 0.45);
 }
-
-.driver-overlay {
-  opacity: 1;
-}
-
-.codedoc-tour-blur {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
-  pointer-events: none;
-}
