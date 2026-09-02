@@ -156,7 +156,16 @@ Production checklist:
 
 ## Guided tutorial (driver.js)
 
-Add a driver.js guided tutorial to the README.md — opt-in, client-only, no backend changes.
+A first-run, client-only tour (powered by `driver.js`) walks through the core flow — no backend
+involved:
+
+1. **Repositories** — on first visit, three steps highlight the repo list, the connect form, and the
+   "TRY SAMPLE REPOSITORY" button.
+2. **Findings** — after visiting a repository, `/findings` highlights the findings list, the severity
+   filter, and the AI-investigation panel.
+
+Replay it anytime from **Settings → Help → Restart guided tour** or the **"Guided tour" link in the
+footer**. Progress lives in `localStorage` (`codedoc_tour_done`, `codedoc_visited_repos`).
 
 ## Repository layout
 
@@ -165,10 +174,11 @@ compose.yaml          Base Compose stack (PostgreSQL, Qdrant, Valkey, MinIO, api
 compose.override.yaml Development overlay (hot reload, mounted sources) — auto-loaded by `docker compose up`
 compose.prod.yml      Production overlay (built images, no mounts, healthchecks, restart policies)
 compose.full.yml      FULL-profile services (Ollama, MLflow, GlitchTip, OpenReplay, observability, SearXNG)
-api/                  FastAPI backend — providers, agents, analysis engine, models, Alembic
-web/                  Next.js frontend — dashboard, findings explorer, Monaco viewer, settings
+api/                  FastAPI backend — providers, analysis engine, scanner, models, Alembic
+web/                  Next.js frontend — dashboard, findings explorer, dependency report, settings
 infra/                Prometheus, Grafana, Loki, OpenTelemetry, reverse-proxy configs
 sample-repo/          Intentionally vulnerable demo repo (used by the "TRY SAMPLE" button)
+Makefile              Dev shortcut targets (docker compose + per-package test/lint/build)
 prompt.md             Original master spec (superseded by README/planning docs)
 ```
 
@@ -183,6 +193,11 @@ prompt.md             Original master spec (superseded by README/planning docs)
 
 See [`tasks.md`](tasks.md) for the full, checkable backlog; [`implementations.md`](implementations.md)
 documents how each subsystem is built.
+
+Shipped: LITE demo (`docker compose up -d --build`), the UI overhaul (dashboard, findings explorer,
+driver.js onboarding tour, exports), healthchecks + Docker hardening, startup env validation, and a
+root `Makefile`. Remaining backlog: LangGraph agents, deeper analysis engine (parsers, analyzer
+wrappers, live OSV/NVD), Observability (OTel/GlitchTip/`/metrics`), voice, auth, and webhooks.
 
 ## License
 

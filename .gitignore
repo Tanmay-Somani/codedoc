@@ -37,9 +37,6 @@ Thumbs.db
 
 # ---- Agents / skills ----
 .agents/
-prompt.md
-tasks.md
-implementations.md
 
 # ---- Runtime data ----
 .gitdata/

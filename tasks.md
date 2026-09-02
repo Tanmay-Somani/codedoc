@@ -4,8 +4,11 @@ Working roadmap. Each task is checkable — flip `[ ]` → `[x]` as you complete
 canonical backlog; new work gets added here before `implementations.md` is updated.
 
 **Current status:** the runnable product is the **LITE** demo
-(`docker compose up -d --build`). Phases 4–9 and several items below under Phase 3/7/8 are NOT yet
-implemented. See `implementations.md` for the actual-vs-aspirational breakdown.
+(`docker compose up -d --build`). The UI has been overhauled (dashboard, findings explorer,
+driver.js onboarding tour, exports, responsive layout); the API/worker/web containers have
+healthchecks; startup env validation and Docker hardening shipped. **Phases 4–9 and several items
+below under Phase 3/7/8 are NOT yet implemented.** See `implementations.md` for the
+actual-vs-aspirational breakdown.
 
 Legend: **LITE** = core product · **STD** = STANDARD mode · **FULL** = FULL mode.
 
@@ -16,7 +19,8 @@ Legend: **LITE** = core product · **STD** = STANDARD mode · **FULL** = FULL mo
 - [x] `.env.example` with the full configuration surface documented
 - [x] MIT LICENSE
 - [x] README.md (comprehensive), tasks.md, implementations.md
-- [ ] GitHub Actions CI: backend (ruff, mypy, pytest) + frontend (lint, typecheck, build) — **no workflows dir present yet**
+- [x] GitHub Actions CI: backend (ruff, mypy, pytest) + frontend (lint, typecheck, build) +
+      docker image smoke build (`.github/workflows/ci.yml`)
 - [ ] Repo topics/description finalization; release tags when milestone ships
 - [ ] `robot.md` does NOT exist yet — keeping it as a Phase 0 deliverable
 
@@ -30,11 +34,12 @@ Legend: **LITE** = core product · **STD** = STANDARD mode · **FULL** = FULL mo
 - [ ] Prometheus scrape config + Grafana dashboards (infra scaffolding exists in
       `infra/prometheus`, `infra/grafana`; dashboards/metrics targets not finalized)
 - [ ] Loki + OTel collector config (`infra/otel/config.yaml` exists; not wired into app)
-- [ ] Healthcheck wiring across services (compose healthchecks exist on infra services +
-      `depends_on: condition: service_healthy`; api/web have no container healthcheck)
+- [x] Healthcheck wiring across services: infra services (postgres/valkey/qdrant/minio) + app
+      services (api → `/health`, web → HTTP 200, worker → process liveness) with
+      `depends_on: condition: service_healthy` (api requires postgres/valkey/qdrant, web requires api)
 - [ ] Resource limits per service (maps to LITE/STANDARD/FULL RAM budgets)
 - [x] `sample-repo/` with intentional vulnerabilities (SQLi, hardcoded secret, weak auth) — exists, may grow
-- [x] Demo safety limits enforced (LITE: repo ≤ 30 MB, files ≤ 1,500, 1 concurrent/user, 10 min timeout)
+- [x] Demo safety limits enforced (LITE: repo ≤ 256 MB, files ≤ 5,000, 1 concurrent/user, 10 min timeout)
 
 ## Phase 2 — Backend core
 
@@ -89,15 +94,20 @@ Legend: **LITE** = core product · **STD** = STANDARD mode · **FULL** = FULL mo
 ## Phase 7 — Frontend (LITE)
 
 - [x] Next.js scaffold: TS strict + Tailwind + custom ui/ + TanStack Query (no Zustand, no shadcn install, no Monaco, no React Flow)
-- [ ] Dashboard home page (root currently redirects straight to `/repositories`)
+- [x] Dashboard page (`/dashboard`): risk score hero, severity bar, stat cards, recent-analyses
+      timeline, integrations panel (root `/` still redirects to `/repositories` by design)
 - [x] Analysis flow: connect repo **or** "TRY SAMPLE REPOSITORY" (no GitHub needed)
-- [ ] Findings explorer: Monaco viewer + Summary-Agent chat (findings list works; no Monaco, no live chat)
+- [ ] Findings explorer: Monaco viewer + Summary-Agent chat (findings list fully shipped — severity
+      filtering, `?severity=`/`?analysis=` URL state, stepped AI-investigation panel, copy-to-clipboard,
+      CSV/JSON/PDF export; **no Monaco, no live chat** yet)
 - [ ] Dependency security report view — **API-wired** (currently static mock; add `GET /api/dependencies`)
 - [ ] Settings: provider toggles + encrypted API keys — **API-wired** (currently form-only; add `GET/POST /api/config`)
 - [ ] Delete-repository end-to-end (backend DELETE + frontend mutation)
 - [ ] React Flow dependency/impact graph; Recharts metrics (Recharts present & used; React Flow not added)
 - [x] No Vercel-specific APIs; self-host / standalone-output compatible
-- [x] **driver.js** guided tour documented in README.md (opt-in, client-only; not bundled by default)
+- [x] **driver.js** guided tour shipped: first-run onboarding for the repositories flow
+      (connect form → try sample) plus a findings deep-dive tour; opt-out via Settings → "Restart
+      guided tour" (replays); `useOnboardingTour` + `lib/tour.ts` localStorage gates
 
 ## Phase 8 — Observability
 
@@ -118,6 +128,13 @@ Legend: **LITE** = core product · **STD** = STANDARD mode · **FULL** = FULL mo
 
 ## Phase 11 — Tests & polish
 
+- [x] Backend startup env validation (`Settings.check_environment()`) — warns/criticals logged by
+      `create_app`; never blocks the LITE demo
+- [x] Docker hardening: `api/Dockerfile` multi-stage + non-root user + HEALTHCHECK, `web/Dockerfile`
+      HEALTHCHECK, `api/.dockerignore`, `web/.dockerignore`, compose app healthchecks
+- [x] Root `Makefile`: `make dev/prod/full/down/logs` + per-package `test/lint/typecheck/build`
+- [x] UI polish shipped: Space Grotesk + clinical palette, footer (guided tour, platform health, GitHub),
+      Sonner toasts, responsive sidebar drawer, `animate-breathe` status dots
 - [x] Backend pytest: redaction, rate-limit tracking (pure-logic, no DB)
 - [ ] Backend pytest: providers (mocked HTTP via respx), dependency pipeline shape, cache TTL
 - [ ] Backend pytest: route-level tests (`ASGITransport` + in-memory DB override) for dependencies/config/analyze redaction
