@@ -1,5 +1,7 @@
 "use client";
 
+import "driver.js/dist/driver.css";
+
 import { useEffect, useRef } from "react";
 import type { Driver, DriveStep } from "driver.js";
 
@@ -25,7 +27,6 @@ export function useOnboardingTour({
     const timeout = setTimeout(async () => {
       try {
         const { driver: createDriver } = await import("driver.js");
-        await import("driver.js/dist/driver.css");
         if (cancelled) return;
 
         driver = createDriver({

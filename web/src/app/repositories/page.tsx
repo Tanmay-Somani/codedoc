@@ -54,10 +54,16 @@ const item = {
   },
 };
 
+function RepositoriesRoute() {
+  const searchParams = useSearchParams();
+  const tour = searchParams.get("tour");
+  return <RepositoriesExplorer key={tour ?? "default"} />;
+}
+
 export default function RepositoriesPage() {
   return (
     <Suspense fallback={null}>
-      <RepositoriesExplorer />
+      <RepositoriesRoute />
     </Suspense>
   );
 }
