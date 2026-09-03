@@ -1,5 +1,7 @@
+import asyncio
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -169,7 +171,9 @@ async def _persist_findings(
             )
 
 
-async def _complete_demo_analysis(analysis_id: int, max_repo_mb: int, max_files: int) -> None:
+async def _complete_demo_analysis(
+    analysis_id: int, max_repo_mb: int, max_files: int, timeout_min: int
+) -> None:
     """Demo stand-in for the scan worker: run the real (LITE) heuristics
     scanner against the repository and persist findings. Sample repositories
     get a seeded, representative result set."""
@@ -196,9 +200,16 @@ async def _complete_demo_analysis(analysis_id: int, max_repo_mb: int, max_files:
             return
 
         try:
-            scan_results, file_count, total_bytes = await run_scan(
-                repo.url, repo.default_branch, max_repo_mb, max_files
+            scan_results, file_count, total_bytes = await asyncio.wait_for(
+                run_scan(repo.url, repo.default_branch, max_repo_mb, max_files),
+                timeout=timeout_min * 60,
             )
+        except TimeoutError:
+            analysis.status = AnalysisStatus.failed
+            analysis.error = f"analysis timed out after {timeout_min} minutes"
+            await db.commit()
+            logger.warning("analysis_timed_out", analysis_id=analysis.id)
+            return
         except ScanError as exc:
             analysis.status = AnalysisStatus.failed
             analysis.error = str(exc)
@@ -333,6 +344,7 @@ async def create_analysis(
         analysis.id,
         settings.demo_max_repo_mb,
         settings.demo_max_files,
+        settings.demo_analysis_timeout_min,
     )
     logger.info("analysis_created", analysis_id=analysis.id, repository=repo.name)
     return AnalysisOut.model_validate(analysis)
@@ -363,10 +375,17 @@ async def get_analysis_findings(
 ) -> list[AnalysisVulnerabilityOut]:
     db: AsyncSession = deps["db"]
     try:
+        severity_rank = case(
+            (Finding.severity == FindingSeverity.critical, 0),
+            (Finding.severity == FindingSeverity.high, 1),
+            (Finding.severity == FindingSeverity.medium, 2),
+            (Finding.severity == FindingSeverity.low, 3),
+            else_=4,
+        )
         result = await db.execute(
             select(Finding)
             .where(Finding.analysis_id == analysis_id)
-            .order_by(Finding.severity)
+            .order_by(severity_rank)
             .options(selectinload(Finding.vulnerability))
         )
         return [AnalysisVulnerabilityOut.model_validate(f) for f in result.scalars().all()]

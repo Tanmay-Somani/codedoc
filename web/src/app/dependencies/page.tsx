@@ -89,6 +89,7 @@ export default function DependenciesPage() {
 
   const total = rows.length;
   const fixAvailable = rows.filter((r) => r.fixed).length;
+  const highRisk = rows.filter((r) => (r.cvss ?? 0) >= 7.0).length;
 
   const chartData = (Object.keys(colorMap) as Severity[]).map((sev) => ({
     name: sev,
@@ -115,8 +116,8 @@ export default function DependenciesPage() {
         <Card>
           <CardContent className="flex items-center justify-between p-5">
             <div>
-              <p className="text-sm text-muted-foreground">Vulnerable</p>
-              <p className="mt-1 text-2xl font-bold text-red-500">{total}</p>
+              <p className="text-sm text-muted-foreground">High risk</p>
+              <p className="mt-1 text-2xl font-bold text-red-500">{highRisk}</p>
             </div>
             <ShieldAlert className="h-6 w-6 text-red-500" />
           </CardContent>

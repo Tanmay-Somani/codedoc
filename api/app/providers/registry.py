@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, cast
 
 import redis.asyncio as aioredis
@@ -74,13 +75,18 @@ class Registry:
                 continue
             if name == "anthropic" and not s.anthropic_api_key:
                 continue
+            start = time.monotonic()
             try:
-                self.rates.record(name, ok=True, latency_ms=10.0)
-                return await provider.complete(prompt, **kwargs)
+                result = await provider.complete(prompt, **kwargs)
             except Exception as exc:  # noqa: BLE001 - fallback is the point
+                latency = (time.monotonic() - start) * 1000
+                self.rates.record(name, ok=False, latency_ms=latency)
                 logger.warning("llm_provider_failed_trying_next", provider=name)
-                self.rates.record(name, ok=False, latency_ms=10.0)
                 last_error = exc
+                continue
+            latency = (time.monotonic() - start) * 1000
+            self.rates.record(name, ok=True, latency_ms=latency)
+            return result
         raise RuntimeError("all LLM providers failed") from last_error
 
     def integration_status(self) -> dict[str, dict[str, Any]]:

@@ -68,13 +68,15 @@ export interface IntegrationStatus {
   usage: Record<string, unknown>;
 }
 
-export interface IntegrationUsage {
-  provider: string;
-  request_count: number;
-  error_count: number;
-  total_latency_ms: number;
+export interface ProviderUsage {
+  requests: number;
+  errors: number;
+  latency_sum_ms: number;
   cache_hits: number;
   cache_misses: number;
   rate_remaining: number | null;
   rate_reset_at: string | null;
+  last_request: string | null;
 }
+
+export type IntegrationUsage = Record<string, ProviderUsage>;

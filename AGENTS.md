@@ -31,12 +31,26 @@ CI order (`api/app` in `.github/workflows/ci.yml`): `ruff format --check` → `r
 
 ```bash
 cd web && npm ci
+npm run dev                         # Next.js dev server (--turbo)
 npm run lint                        # ESLint (next/core-web-vitals)
 npm run typecheck                   # tsc --noEmit
 npm run build                       # production build
 ```
 
 CI order: `lint` → `typecheck` → `build`.
+
+### Makefile (repo root)
+
+Aggregate targets — run from repo root, no `cd` needed:
+
+```bash
+make test            # pytest (api) + lint+typecheck+build (web)
+make lint            # ruff check (api) + eslint (web)
+make typecheck       # mypy (api) + tsc (web)
+make format          # ruff format (api)
+make dev             # docker compose up -d --build
+make prod            # docker compose prod stack
+```
 
 ### Docker Compose
 
@@ -65,7 +79,7 @@ Public demo runs **LITE** only. STANDARD/FULL services live behind Compose profi
 - pytest `asyncio_mode = "auto"` (no explicit `@pytest.mark.asyncio`), testpaths `tests/`.
 - structlog JSON logging only — `get_logger(__name__)`, never `print()` or stdlib `logging` directly.
 - Settings via pydantic-settings from `.env` (`app/config.py`). Never log secret values; API keys are encrypted at rest via `KeyVault` (`app/core/security.py`, Fernet from `SECRET_KEY`).
-- All ORM models in `app/models/entities.py`. Timestamps via `TimestampMixin`; enums are `str` (`enum.StrEnum`).
+- All ORM models in `app/models/entities.py`. Timestamps via `TimestampMixin` (defined in `app/db/base.py`); enums are `str` (`enum.StrEnum`).
 - API deps injected via `app/api/deps.py:get_deps()` → `Deps = dict[str, Any]`.
 - Alembic migrations in `api/alembic/versions/`, auto-run (`alembic upgrade head`) on API container start.
 

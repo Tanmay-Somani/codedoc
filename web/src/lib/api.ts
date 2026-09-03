@@ -2,7 +2,7 @@ import type {
   Analysis,
   Finding,
   HealthResponse,
-  IntegrationUsage,
+  IntegrationStatus,
   Repository,
 } from "@/lib/types";
 
@@ -32,10 +32,7 @@ export const api = {
 
   health: () => request<HealthResponse>("/health"),
 
-  integrationStatus: () =>
-    request<{ providers: Record<string, string>; active_llm: string; usage: unknown }>(
-      "/api/integrations/status"
-    ),
+  integrationStatus: () => request<IntegrationStatus>("/api/integrations/status"),
 
   repositories: () => request<Repository[]>("/api/repositories"),
   createRepository: (data: {
@@ -69,4 +66,3 @@ export const api = {
     }),
 };
 
-export type { IntegrationUsage };
