@@ -357,26 +357,58 @@ def _scan_sync(
     """
     tmp = Path(tempfile.mkdtemp(prefix="codedoc-scan-"))
     try:
-        cmd = ["git", "clone", "--depth", "1", "--quiet"]
-        if branch:
-            cmd += ["--branch", branch]
-        cmd += [repo_url, str(tmp / "repo")]
-
-        try:
-            proc = subprocess.run(
-                cmd,
-                cwd=str(tmp),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                timeout=120,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise ScanError("git clone timed out (120s limit)") from exc
-        if proc.returncode != 0:
-            detail = proc.stderr.decode(errors="ignore").strip().splitlines()
-            raise ScanError(f"git clone failed: {(detail or ['unknown error'])[-1][:300]}")
-
         root = tmp / "repo"
+        should_fallback = not branch
+
+        if branch:
+            cmd = [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--quiet",
+                "--branch",
+                branch,
+                repo_url,
+                str(root),
+            ]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=str(tmp),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    timeout=120,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise ScanError("git clone timed out (120s limit)") from exc
+            if proc.returncode != 0:
+                detail = proc.stderr.decode(errors="ignore").strip().splitlines()
+                # The requested branch may not exist (e.g. guessed "main" but the
+                # repo defaults to "master"). Fall back to the remote default HEAD.
+                should_fallback = any(
+                    keyword in d.lower()
+                    for d in detail
+                    for keyword in ("remote branch", "not found", "couldn't find", "no such branch")
+                )
+                if not should_fallback:
+                    raise ScanError(f"git clone failed: {(detail or ['unknown error'])[-1][:300]}")
+
+        if should_fallback:
+            cmd = ["git", "clone", "--depth", "1", "--quiet", repo_url, str(root)]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=str(tmp),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    timeout=120,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise ScanError("git clone timed out (120s limit)") from exc
+            if proc.returncode != 0:
+                detail = proc.stderr.decode(errors="ignore").strip().splitlines()
+                raise ScanError(f"git clone failed: {(detail or ['unknown error'])[-1][:300]}")
 
         files: list[tuple[str, str]] = []
         total_bytes = 0

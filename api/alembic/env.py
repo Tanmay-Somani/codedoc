@@ -1,10 +1,17 @@
 import os
 import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+_ALEMBIC_DIR = Path(__file__).resolve().parent  # .../codedoc/api/alembic
+_API_ROOT = _ALEMBIC_DIR.parent  # .../codedoc/api
+_REPO_ROOT = _API_ROOT.parent  # .../codedoc
+
+load_dotenv(
+    os.getenv("CODEDOC_ENV_FILE", str(_REPO_ROOT / ".env")),
+)
 
 from alembic import context
 

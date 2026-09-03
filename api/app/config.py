@@ -5,7 +5,12 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_ENV_FILE = os.getenv("CODEDOC_ENV_FILE", str(Path(__file__).resolve().parent.parent / ".env"))
+_API_ROOT = Path(__file__).resolve().parent.parent  # .../codedoc/api
+_REPO_ROOT = _API_ROOT.parent  # .../codedoc
+_ENV_FILE = os.getenv(
+    "CODEDOC_ENV_FILE",
+    str(_REPO_ROOT / ".env"),
+)
 
 
 class Settings(BaseSettings):
