@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { useMemo } from "react";
 import {
   CheckCircle2,
   Database,
@@ -20,7 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { fadeUpItem, staggerContainer } from "@/lib/animations";
 
 interface ServiceInfo {
   name: string;
@@ -33,41 +34,14 @@ const serviceCatalog: ServiceInfo[] = [
   { name: "Gemini", key: "llm", group: "AI Provider" },
   { name: "Groq", key: "llm", group: "AI Provider" },
   { name: "Ollama", key: "llm", group: "AI Provider" },
-  { name: "OSV", key: "vulnerability", group: "Security Data" },
-  { name: "NVD", key: "vulnerability", group: "Security Data" },
-  { name: "GitHub Advisory", key: "vulnerability", group: "Security Data" },
-  { name: "PyPI", key: "package", group: "Package Registry" },
-  { name: "npm", key: "package", group: "Package Registry" },
   { name: "Qdrant", key: "vector", group: "Infrastructure" },
   { name: "Valkey", key: "cache", group: "Infrastructure" },
-  { name: "PostgreSQL", key: "database", group: "Infrastructure" },
-  { name: "MinIO", key: "storage", group: "Infrastructure" },
 ];
 
 const fallbackState: Record<string, "healthy" | "unknown"> = {
   vector: "healthy",
   cache: "healthy",
   llm: "healthy",
-};
-
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.03,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const item = {
-  hidden: { opacity: 0, y: 6 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
-  },
 };
 
 export default function IntegrationsPage() {
@@ -78,9 +52,23 @@ export default function IntegrationsPage() {
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
 
   const providers = integrations.data?.providers ?? {};
-  const healthServices: [string, string][] = health.data?.services
-    ? Object.entries(health.data.services)
-    : [];
+  const usage = integrations.data?.usage ?? {};
+  const healthServices = useMemo<[string, string][]>(
+    () => (health.data?.services ? Object.entries(health.data.services) : []),
+    [health.data]
+  );
+
+  const catalog = useMemo<ServiceInfo[]>(() => {
+    const merged = [...serviceCatalog];
+    for (const [k] of healthServices) {
+      if (!merged.some((s) => s.name.toLowerCase() === k.toLowerCase())) {
+        merged.push({ name: k, key: "infra", group: "Backend Service" });
+      }
+    }
+    return merged;
+  }, [healthServices]);
+
+  const usageEntries = Object.entries(usage).sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <motion.div
@@ -131,11 +119,11 @@ export default function IntegrationsPage() {
               ) : (
                 <motion.div
                   className="divide-y divide-border/50"
-                  variants={container}
+                  variants={staggerContainer}
                   initial="hidden"
                   animate="show"
                 >
-                  {serviceCatalog.map((s) => {
+                  {catalog.map((s) => {
                     const providerValue = providers[s.name.toLowerCase()];
                     const isPresent = providerValue !== undefined;
                     const state = isPresent
@@ -145,7 +133,7 @@ export default function IntegrationsPage() {
                     return (
                       <motion.div
                         key={s.name}
-                        variants={item}
+                        variants={fadeUpItem}
                         className="flex items-center justify-between py-3 group hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors duration-200"
                       >
                         <div>
@@ -215,14 +203,48 @@ export default function IntegrationsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm">
-              <p className="flex items-center gap-2 text-muted-foreground">
-                <RefreshCw className="h-3.5 w-3.5" />
-                Rate limits and request counts are tracked per provider and
-                surfaced here once the queue records usage.
-              </p>
+              {usageEntries.length === 0 ? (
+                <p className="flex items-center gap-2 text-muted-foreground">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Rate limits and request counts are tracked per provider and
+                  surfaced here once the queue records usage.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {usageEntries.map(([name, metrics]) => {
+                    const m = metrics as Record<string, unknown>;
+                    const requests = (m.requests as number) ?? 0;
+                    const errors = (m.errors as number) ?? 0;
+                    const remaining = m.rate_remaining;
+                    return (
+                      <div
+                        key={name}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium capitalize">
+                            {name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {requests} request{requests === 1 ? "" : "s"}
+                            {errors > 0 ? ` · ${errors} error${errors === 1 ? "" : "s"}` : ""}
+                          </p>
+                        </div>
+                        {remaining != null && (
+                          <Badge variant="secondary" className="shrink-0">
+                            {String(remaining)} left
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div className="mt-3">
                 <a
-                  href={"/docs"}
+                  href={`${api.baseUrl}/docs`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline transition-colors duration-200"
                 >
                   Open API docs

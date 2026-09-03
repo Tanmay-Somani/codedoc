@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatBytes, relativeTime, severityOrder } from "@/lib/severity";
 import type { Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useActiveAnalyses } from "@/hooks/use-active-analyses";
 
 const severitySegment: Record<Severity, string> = {
   critical: "bg-red-500",
@@ -86,7 +87,7 @@ function StatCard({
 export default function DashboardPage() {
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
   const repositories = useQuery({ queryKey: ["repos"], queryFn: api.repositories });
-  const analyses = useQuery({ queryKey: ["analyses"], queryFn: api.analyses });
+  const { analyses, active: running } = useActiveAnalyses();
   const integrations = useQuery({
     queryKey: ["integrations"],
     queryFn: api.integrationStatus,
@@ -97,18 +98,24 @@ export default function DashboardPage() {
   const repoList = repositories.data ?? [];
   const analysisList = analyses.data ?? [];
   const completed = analysisList.filter((a) => a.status === "completed").length;
-  const running = analysisList.filter((a) => a.status === "running" || a.status === "queued");
   const totalBytes = repoList.reduce((sum, r) => sum + (r.size_bytes ?? 0), 0);
   const totalFiles = repoList.reduce((sum, r) => sum + (r.file_count ?? 0), 0);
   const healthStatusOk = health.data?.status === "ok";
-  const status = health.data?.status ?? "unknown";
+  const apiUnreachable = health.isError;
+  const degraded = healthStatusOk && (repositories.isError || analyses.isError || integrations.isError);
+  const errorBanner: string | null = apiUnreachable
+    ? "The backend API is not responding. Start the API server to load live data."
+    : degraded
+      ? "The API is online, but some data couldn't be loaded. Showing partial data."
+      : integrations.isError
+        ? "Integration status is unavailable right now."
+        : null;
 
   const latestCompleted = analysisList.find((a) => a.status === "completed");
   const latestFindings = useQuery({
     queryKey: ["findings", latestCompleted?.id],
     queryFn: () => api.findings(latestCompleted!.id),
     enabled: !!latestCompleted,
-    refetchInterval: 5000,
   });
   const severityCounts: Record<Severity, number> = useMemo(() => {
     const counts: Record<Severity, number> = {
@@ -375,13 +382,10 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {status === "unknown" && !initialLoading && (
+      {errorBanner && !initialLoading && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-600">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          <span>
-            The backend API is not responding. Start the API server to load live
-            data, or check platform health on the Integrations page.
-          </span>
+          <span>{errorBanner}</span>
           <Button size="sm" variant="outline" asChild className="ml-auto shrink-0">
             <Link href="/integrations">Check</Link>
           </Button>

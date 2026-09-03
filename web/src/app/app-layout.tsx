@@ -8,7 +8,7 @@ import { Footer } from "@/components/footer";
 import { Toaster } from "@/components/toaster";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <Providers>
@@ -20,7 +20,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           />
         )}
         <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="transition-all duration-300 ease-out-expo lg:pl-60">
+        <main id="main-content" className="transition-all duration-300 ease-out-expo lg:pl-60">
           <div className="sticky top-0 z-[15] flex h-14 items-center gap-3 border-b border-border/50 bg-background/80 px-4 backdrop-blur-sm lg:hidden">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}

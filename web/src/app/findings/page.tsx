@@ -10,7 +10,8 @@ import {
   CheckCircle2,
   Download,
   FileCode2,
-  FileText,
+  FileDown,
+  FileJson,
   Loader2,
   Radar,
   Search,
@@ -40,75 +41,10 @@ import { CopyButton } from "@/components/copy-button";
 import { exportFindings } from "@/lib/export";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import { markTourDone, reposVisited, tourDone } from "@/lib/tour";
+import { easeOutExpo, fadeInItem, staggerContainer } from "@/lib/animations";
+import { sampleFindings } from "@/lib/sample-data";
+import { useActiveAnalyses } from "@/hooks/use-active-analyses";
 import { toast } from "sonner";
-
-const sampleFindings: Finding[] = [
-  {
-    id: 1,
-    tool: "bandit",
-    rule_id: "B608",
-    severity: "high",
-    file_path: "app/auth.py",
-    line_start: 14,
-    line_end: 14,
-    message: "Potential hardcoded password: hardcoded_password_string",
-    ai_explanation:
-      "This code embeds a plaintext password directly in source. Anyone with read access to the repository can extract it. Replace with a secret-vault reference or environment variable.",
-    root_cause: "Developer convenience made the secret a literal in a constants module.",
-  },
-  {
-    id: 2,
-    tool: "semgrep",
-    rule_id: "python.lang.security.sql-injection",
-    severity: "critical",
-    file_path: "app/db.py",
-    line_start: 42,
-    line_end: 45,
-    message: "SQL statement built from unsanitized user input",
-    ai_explanation:
-      "User-supplied input is interpolated directly into a SQL string. An attacker can inject arbitrary SQL. Use parameterized queries or an ORM to bind values safely.",
-    root_cause: "Query built via f-string instead of a parameterized cursor.execute.",
-  },
-  {
-    id: 3,
-    tool: "gitleaks",
-    rule_id: "generic-api-key",
-    severity: "medium",
-    file_path: ".env.example",
-    line_start: 3,
-    line_end: 3,
-    message: "Detected a possible API key in source",
-    ai_explanation:
-      "A token-shaped string was found. It has been redacted before reaching any external LLM. Rotate the key and store it in the encrypted vault.",
-    root_cause: "Example environment file committed with a placeholder that looks like a key.",
-  },
-  {
-    id: 4,
-    tool: "ruff",
-    rule_id: "S105",
-    severity: "low",
-    file_path: "worker.py",
-    line_start: 20,
-    line_end: 20,
-    message: "Hardcoded temporary admin password",
-    ai_explanation:
-      "A default password is set in code. While usable for local dev, it must not ship to production.",
-    root_cause: "Bootstrap script uses a static default credential.",
-  },
-  {
-    id: 5,
-    tool: "eslint",
-    rule_id: "no-unused-vars",
-    severity: "info",
-    file_path: "src/index.ts",
-    line_start: 7,
-    line_end: 7,
-    message: "'foo' is defined but never used",
-    ai_explanation:
-      "Dead code increases maintenance cost. Removing unused bindings keeps the codebase clean.",
-    root_cause: "Leftover variable from an earlier refactor.",
-  },
-];
 
 const severityBorder: Record<Severity, string> = {
   critical: "border-l-red-500",
@@ -126,26 +62,6 @@ const severityGlow: Record<Severity, string> = {
   info: "shadow-slate-500/20",
 };
 
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.04,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const item = {
-  hidden: { opacity: 0, x: -10 },
-  show: {
-    opacity: 1,
-    x: 0,
-    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
-  },
-};
-
 export default function FindingsPage() {
   return (
     <Suspense fallback={null}>
@@ -159,11 +75,7 @@ function FindingsExplorer() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const analyses = useQuery({
-    queryKey: ["analyses"],
-    queryFn: api.analyses,
-    refetchInterval: 5000,
-  });
+  const { analyses } = useActiveAnalyses();
   const repos = useQuery({ queryKey: ["repos"], queryFn: api.repositories });
 
   const urlSeverity = searchParams.get("severity");
@@ -254,8 +166,8 @@ function FindingsExplorer() {
   const findingsQuery = useQuery({
     queryKey: ["findings", active?.id],
     queryFn: () => api.findings(active!.id),
-    enabled: !!active,
-    refetchInterval: 5000,
+    enabled: !!active && !!analyses.isSuccess,
+    refetchInterval: scanning ? 5000 : false,
   });
 
   const findings: Finding[] = useMemo(() => {
@@ -297,14 +209,18 @@ function FindingsExplorer() {
   const activeFinding = selected ?? filtered[0] ?? null;
 
   const handleExport = useCallback(
-    (format: "csv" | "json" | "pdf") => {
+    async (format: "csv" | "json" | "pdf") => {
       const count = filtered.length;
       if (count === 0) {
         toast.info("Nothing to export — no findings match the current filters.");
         return;
       }
-      exportFindings(format, filtered, activeRepo?.name ?? "codedoc");
-      toast.success(`Exported ${count} ${count === 1 ? "finding" : "findings"} as ${format.toUpperCase()}.`);
+      try {
+        await exportFindings(format, filtered, activeRepo?.name ?? "codedoc");
+        toast.success(`Exported ${count} ${count === 1 ? "finding" : "findings"} as ${format.toUpperCase()}.`);
+      } catch {
+        toast.error("Export failed. Please try again.");
+      }
     },
     [filtered, activeRepo]
   );
@@ -335,7 +251,7 @@ function FindingsExplorer() {
             onClick={() => handleExport("json")}
             title="Download JSON"
           >
-            <FileText className="h-3.5 w-3.5" />
+            <FileJson className="h-3.5 w-3.5" />
             JSON
           </Button>
           <Button
@@ -344,7 +260,7 @@ function FindingsExplorer() {
             onClick={() => handleExport("pdf")}
             title="Download PDF report"
           >
-            <FileText className="h-3.5 w-3.5" />
+            <FileDown className="h-3.5 w-3.5" />
             PDF
           </Button>
         </div>
@@ -361,6 +277,7 @@ function FindingsExplorer() {
           size="sm"
           variant={selectedSeverity === "all" ? "default" : "outline"}
           onClick={() => setSelectedSeverity("all")}
+          aria-pressed={selectedSeverity === "all"}
         >
           All ({findings.length})
         </Button>
@@ -371,6 +288,7 @@ function FindingsExplorer() {
             variant={selectedSeverity === sev ? "default" : "outline"}
             onClick={() => setSelectedSeverity(sev)}
             className="capitalize"
+            aria-pressed={selectedSeverity === sev}
           >
             {sev} ({counts[sev] ?? 0})
           </Button>
@@ -446,12 +364,12 @@ function FindingsExplorer() {
                              : "No findings yet."}
                 </p>
               ) : (
-                <motion.div variants={container} initial="hidden" animate="show">
+                <motion.div variants={staggerContainer} initial="hidden" animate="show">
                   <AnimatePresence mode="popLayout">
                     {filtered.map((f) => (
                       <motion.div
                         key={f.id}
-                        variants={item}
+                        variants={fadeInItem}
                         layout
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.2 }}
@@ -519,7 +437,7 @@ function FindingsExplorer() {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
+                    transition={{ duration: 0.25, ease: easeOutExpo }}
                   >
                     <div className="mb-4 flex items-center justify-between">
                       <SeverityBadge severity={activeFinding.severity} />
@@ -600,15 +518,20 @@ function FindingsExplorer() {
                         </Step>
                       )}
 
-                      <Step
-                        icon={FileCode2}
-                        tone="text-emerald-400"
-                        title="Patch Agent · Suggestion"
-                        done={false}
-                      >
-                        A production-ready diff with sandbox tests will appear here — and can be
-                        opened straight as a GitHub PR.
-                      </Step>
+                      {activeFinding.patch ? (
+                        <Step
+                          icon={FileCode2}
+                          tone="text-emerald-400"
+                          title="Patch Agent · Suggestion"
+                          done
+                        >
+                          {activeFinding.patch}
+                        </Step>
+                      ) : (
+                        <p className="mt-4 rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                          Patch Agent (auto-fix suggestions) is coming soon for this finding.
+                        </p>
+                      )}
                     </div>
 
                     {findingsQuery.isLoading && (

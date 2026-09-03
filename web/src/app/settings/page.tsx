@@ -7,12 +7,14 @@ import {
   Bot,
   Eye,
   EyeOff,
+  Info,
   KeyRound,
   Lock,
   Map,
   Save,
   ShieldCheck,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -144,6 +146,8 @@ export default function SettingsPage() {
                             onClick={() =>
                               setShow((s) => ({ ...s, [keyName]: !s[keyName] }))
                             }
+                            aria-label={shown ? `Hide ${p.name} ${k.toLowerCase()}` : `Show ${p.name} ${k.toLowerCase()}`}
+                            aria-pressed={shown}
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-200"
                           >
                             {shown ? (
@@ -190,6 +194,9 @@ export default function SettingsPage() {
                       </div>
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={!!enabled}
+                        aria-label={`Toggle ${p.name}`}
                         onClick={() =>
                           setValues((v) => ({
                             ...v,
@@ -250,9 +257,18 @@ export default function SettingsPage() {
 
         <motion.div
           variants={item}
-          className="flex justify-end"
+          className="flex flex-col items-end gap-2"
         >
-          <Button className="gap-1.5">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5" />
+            Settings are applied locally — syncing to the server is coming soon.
+          </div>
+          <Button
+            className="gap-1.5"
+            onClick={() =>
+              toast.info("Settings kept locally — server sync coming soon.")
+            }
+          >
             <Save className="h-4 w-4" />
             Save settings
           </Button>

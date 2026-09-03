@@ -9,7 +9,7 @@ export const severityStyles: Record<Severity, string> = {
   high: "bg-orange-500/15 text-orange-400 border-orange-500/30",
   medium: "bg-amber-500/15 text-amber-400 border-amber-500/30",
   low: "bg-sky-500/15 text-sky-400 border-sky-500/30",
-  info: "bg-slate-500/15 text-slate-400 border-slate-500/30",
+  info: "bg-slate-500/15 text-slate-300 border-slate-500/30",
 };
 
 export const severityDot: Record<Severity, string> = {
@@ -45,6 +45,7 @@ export function formatBytes(bytes: number): string {
 export function relativeTime(input: string | Date): string {
   const date = typeof input === "string" ? new Date(input) : input;
   const diff = Date.now() - date.getTime();
+  if (diff < 0) return "just now";
   const mins = Math.floor(diff / 60_000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;

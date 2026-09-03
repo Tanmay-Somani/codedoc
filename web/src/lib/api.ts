@@ -11,11 +11,15 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8_000);
+  const headers = { ...(init?.headers as Record<string, string> | undefined) };
+  if (init?.body != null && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
   try {
     const res = await fetch(`${API_URL}${path}`, {
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
       ...init,
+      headers,
+      signal: controller.signal,
     });
     if (!res.ok) {
       const detail = await res.text();

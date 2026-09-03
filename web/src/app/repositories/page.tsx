@@ -31,28 +31,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatBytes, relativeTime } from "@/lib/severity";
 import type { Analysis, Repository } from "@/lib/types";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
+import { useActiveAnalyses } from "@/hooks/use-active-analyses";
 import { markReposVisited, tourDone } from "@/lib/tour";
+import { fadeUpItem, staggerContainer } from "@/lib/animations";
 import { toast } from "sonner";
-
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const item = {
-  hidden: { opacity: 0, y: 10 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
-  },
-};
 
 function RepositoriesRoute() {
   const searchParams = useSearchParams();
@@ -121,13 +103,10 @@ function RepositoriesExplorer() {
   const [error, setError] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Repository | null>(null);
+  const [creatingSample, setCreatingSample] = useState(false);
 
   const repos = useQuery({ queryKey: ["repos"], queryFn: api.repositories });
-  const analyses = useQuery({
-    queryKey: ["analyses"],
-    queryFn: api.analyses,
-    refetchInterval: 5000,
-  });
+  const { analyses } = useActiveAnalyses();
 
   const activeAnalysisByRepo = useMemo(() => {
     const m = new Map<number, Analysis>();
@@ -154,7 +133,7 @@ function RepositoriesExplorer() {
       setUrl("");
       setError(null);
       qc.invalidateQueries({ queryKey: ["repos"] });
-      toast.success(`Added ${repo.name}`);
+      toast.success(`Added ${repo.name} — click Analyze to start scanning.`);
     },
     onError: (err) => {
       const msg = err instanceof Error ? err.message : "Failed to add repository";
@@ -201,9 +180,13 @@ function RepositoriesExplorer() {
       startAnalysis(sampleRepo.id);
       return;
     }
+    setCreatingSample(true);
     createRepo.mutate(
       { name: "sample-repo", default_branch: "main", is_sample: true },
-      { onSuccess: (repo) => startAnalysis(repo.id) }
+      {
+        onSuccess: (repo) => startAnalysis(repo.id),
+        onSettled: () => setCreatingSample(false),
+      }
     );
   };
 
@@ -225,6 +208,19 @@ function RepositoriesExplorer() {
     setConfirmDelete(repo);
   };
 
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !deleteRepo.isPending) setConfirmDelete(null);
+    };
+    document.addEventListener("keydown", onKey);
+    cancelRef.current?.focus();
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmDelete, deleteRepo.isPending]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -240,9 +236,9 @@ function RepositoriesExplorer() {
           size="sm"
           data-guide="try-sample"
           onClick={handleSample}
-          disabled={createRepo.isPending || runAnalysis.isPending}
+          disabled={creatingSample || runAnalysis.isPending || !!sampleActive}
         >
-          {(createRepo.isPending || runAnalysis.isPending) && analyzingId === null ? (
+          {creatingSample || (runAnalysis.isPending && analyzingId !== null) ? (
             <Loader2 className="mr-1 h-4 w-4 animate-spin" />
           ) : sampleActive ? (
             <Eye className="mr-1 h-4 w-4" />
@@ -365,12 +361,12 @@ function RepositoriesExplorer() {
       ) : (
         <motion.div
           className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          variants={container}
+          variants={staggerContainer}
           initial="hidden"
           animate="show"
         >
           {(repos.data ?? []).map((repo) => (
-            <motion.div key={repo.id} variants={item}>
+            <motion.div key={repo.id} variants={fadeUpItem}>
               <Card className="group hover:border-primary/30">
                 <CardContent className="pt-5">
                   <div className="flex items-start justify-between">
@@ -409,6 +405,8 @@ function RepositoriesExplorer() {
                       variant="ghost"
                       className="ml-auto"
                       onClick={() => handleDelete(repo)}
+                      aria-label={`Delete repository ${repo.name}`}
+                      title="Delete repository"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -424,12 +422,19 @@ function RepositoriesExplorer() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={() => !deleteRepo.isPending && setConfirmDelete(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-dialog-title"
         >
           <div
+            ref={confirmRef}
             className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 text-base font-medium">
+            <div
+              id="delete-dialog-title"
+              className="flex items-center gap-2 text-base font-medium"
+            >
               <Trash2 className="h-5 w-5 text-destructive" />
               Delete repository?
             </div>
@@ -440,6 +445,7 @@ function RepositoriesExplorer() {
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <Button
+                ref={cancelRef}
                 variant="outline"
                 size="sm"
                 onClick={() => setConfirmDelete(null)}

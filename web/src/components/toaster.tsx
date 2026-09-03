@@ -11,8 +11,9 @@ export function Toaster() {
       closeButton
       toastOptions={{
         style: {
-          border: "1px solid hsl(216 26% 15%)",
-          background: "hsl(223 44% 5%)",
+          border: "1px solid hsl(var(--border))",
+          background: "hsl(var(--card))",
+          color: "hsl(var(--card-foreground))",
         },
       }}
     />

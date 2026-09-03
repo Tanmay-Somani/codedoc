@@ -32,7 +32,7 @@ export function AppSidebar({ open, onClose }: { open: boolean; onClose: () => vo
         open ? "translate-x-0" : "-translate-x-full"
       )}
     >
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-2 pt-4">
+      <nav aria-label="Main navigation" className="flex-1 space-y-0.5 overflow-y-auto p-2 pt-4">
         {navItems.map(({ href, label, icon: Icon }, i) => {
           const active = pathname === href || (href !== "/" && pathname.startsWith(href));
           return (
@@ -45,6 +45,7 @@ export function AppSidebar({ open, onClose }: { open: boolean; onClose: () => vo
               <Link
                 href={href}
                 onClick={onClose}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out-expo",
                   active

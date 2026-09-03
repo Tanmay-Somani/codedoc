@@ -21,6 +21,7 @@ import {
   YAxis,
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -31,6 +32,7 @@ import { PageHeader } from "@/components/page-header";
 import { api } from "@/lib/api";
 import { SeverityBadge } from "@/lib/severity";
 import type { Finding, Severity } from "@/lib/types";
+import { useActiveAnalyses } from "@/hooks/use-active-analyses";
 
 interface DependencyRow {
   key: number;
@@ -52,11 +54,7 @@ const colorMap: Record<Severity, string> = {
 };
 
 export default function DependenciesPage() {
-  const analyses = useQuery({
-    queryKey: ["analyses"],
-    queryFn: api.analyses,
-    refetchInterval: 5000,
-  });
+  const { analyses } = useActiveAnalyses();
 
   const latestCompleted = (analyses.data ?? []).find(
     (a) => a.status === "completed"
@@ -66,7 +64,6 @@ export default function DependenciesPage() {
     queryKey: ["findings", latestCompleted?.id],
     queryFn: () => api.findings(latestCompleted!.id),
     enabled: !!latestCompleted,
-    refetchInterval: 5000,
   });
 
   const rows: DependencyRow[] = useMemo(() => {
@@ -217,23 +214,14 @@ export default function DependenciesPage() {
                   Produce a production-ready upgrade diff with sandbox tests.
                 </p>
               </div>
-              <ButtonLink href="#patch">Open pull request</ButtonLink>
+              <Button disabled title="Patch Agent coming soon">
+                <ArrowUpRight className="h-3.5 w-3.5" />
+                Open pull request
+              </Button>
             </CardContent>
           </Card>
         </div>
       </div>
     </div>
-  );
-}
-
-function ButtonLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <a
-      href={href}
-      className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-    >
-      {children}
-      <ArrowUpRight className="h-3.5 w-3.5" />
-    </a>
   );
 }

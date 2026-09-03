@@ -45,6 +45,7 @@ export interface Finding {
   message: string;
   ai_explanation: string | null;
   root_cause: string | null;
+  patch?: string | null;
   raw_data?: {
     package?: string;
     version?: string;
