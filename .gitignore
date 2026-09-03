@@ -37,6 +37,7 @@ Thumbs.db
 
 # ---- Agents / skills ----
 .agents/
+AGENTS.md
 
 # ---- Runtime data ----
 .gitdata/
