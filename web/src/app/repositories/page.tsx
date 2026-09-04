@@ -101,9 +101,22 @@ function RepositoriesExplorer() {
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("main");
   const [error, setError] = useState<string | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Repository | null>(null);
   const [creatingSample, setCreatingSample] = useState(false);
+
+  const GIT_URL_RE =
+    /^(https?:\/\/[^\s]+\.git|git@[\w.-]+:[^\s]+\.git|https?:\/\/[^\s]+)$/i;
+
+  const validateUrl = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (!GIT_URL_RE.test(trimmed)) {
+      return "Enter a valid Git URL (e.g. https://github.com/org/repo.git)";
+    }
+    return null;
+  };
 
   const repos = useQuery({ queryKey: ["repos"], queryFn: api.repositories });
   const { analyses } = useActiveAnalyses();
@@ -271,6 +284,12 @@ function RepositoriesExplorer() {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!name.trim()) return;
+                const urlErr = validateUrl(url);
+                if (urlErr) {
+                  setUrlError(urlErr);
+                  return;
+                }
+                setUrlError(null);
                 setError(null);
                 createRepo.mutate({
                   name: name.trim(),
@@ -297,9 +316,15 @@ function RepositoriesExplorer() {
                 </label>
                 <Input
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => {
+                    setUrl(e.target.value);
+                    if (urlError) setUrlError(null);
+                  }}
                   placeholder="https://github.com/org/repo.git"
                 />
+                {urlError && (
+                  <p className="mt-1 text-xs text-destructive">{urlError}</p>
+                )}
               </div>
               <div className="w-28">
                 <label className="text-xs font-medium text-muted-foreground">

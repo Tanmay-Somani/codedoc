@@ -8,13 +8,14 @@ import {
   AlertTriangle,
   BrainCircuit,
   CheckCircle2,
-  Download,
+  ChevronDown,
   FileCode2,
   FileDown,
   FileJson,
   Loader2,
   Radar,
   Search,
+  Share2,
   Sparkles,
   Terminal,
   Wand2,
@@ -39,9 +40,10 @@ import type { Analysis, Finding, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/copy-button";
 import { exportFindings } from "@/lib/export";
+import { DropdownMenu } from "@/components/dropdown-menu";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import { markTourDone, reposVisited, tourDone } from "@/lib/tour";
-import { easeOutExpo, fadeInItem, staggerContainer } from "@/lib/animations";
+import { easeOutExpo } from "@/lib/animations";
 import { sampleFindings } from "@/lib/sample-data";
 import { useActiveAnalyses } from "@/hooks/use-active-analyses";
 import { toast } from "sonner";
@@ -235,35 +237,38 @@ function FindingsExplorer() {
         title="Findings Explorer"
         description="Investigate findings with severity, CVSS, and AI explanations"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleExport("csv")}
-            title="Download CSV"
-          >
-            <Download className="h-3.5 w-3.5" />
-            CSV
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleExport("json")}
-            title="Download JSON"
-          >
-            <FileJson className="h-3.5 w-3.5" />
-            JSON
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleExport("pdf")}
-            title="Download PDF report"
-          >
-            <FileDown className="h-3.5 w-3.5" />
-            PDF
-          </Button>
-        </div>
+        <DropdownMenu
+          align="right"
+          items={[
+            {
+              label: "PDF report",
+              description: "Formatted printable report",
+              icon: FileDown,
+              onSelect: () => handleExport("pdf"),
+            },
+            {
+              label: "JSON",
+              description: "Raw findings as JSON",
+              icon: FileJson,
+              onSelect: () => handleExport("json"),
+            },
+            {
+              label: "CSV",
+              description: "Spreadsheet-friendly export",
+              icon: FileCode2,
+              onSelect: () => handleExport("csv"),
+            },
+          ]}
+          trigger={(open) => (
+            <Button size="sm" variant="outline" className="gap-1.5">
+              <Share2 className="h-3.5 w-3.5" />
+              Share
+              <ChevronDown
+                className={cn("h-3.5 w-3.5 transition-transform duration-200", open && "rotate-180")}
+              />
+            </Button>
+          )}
+        />
       </PageHeader>
 
       <motion.div
@@ -364,54 +369,45 @@ function FindingsExplorer() {
                              : "No findings yet."}
                 </p>
               ) : (
-                <motion.div variants={staggerContainer} initial="hidden" animate="show">
-                  <AnimatePresence mode="popLayout">
-                    {filtered.map((f) => (
-                      <motion.div
-                        key={f.id}
-                        variants={fadeInItem}
-                        layout
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <button
-                          onClick={() => setSelected(f)}
-                          className={cn(
-                            "w-full rounded-lg border border-l-2 p-3 text-left transition-all duration-200 ease-out-expo",
-                            severityBorder[f.severity],
-                            activeFinding?.id === f.id
-                              ? cn(
-                                  "border-primary bg-primary/5 shadow-sm",
-                                  severityGlow[f.severity]
-                                )
-                              : "border-border/50 hover:border-border hover:bg-muted/30"
-                          )}
-                        >
-                          <div className="flex items-center justify-between">
-                            <SeverityBadge severity={f.severity} />
-                            <span className="text-xs text-muted-foreground">{f.tool}</span>
-                          </div>
-                          <p className="mt-2 text-sm font-medium leading-snug">{f.message}</p>
-                          <p className="mt-1 flex items-center gap-1 truncate font-mono text-xs text-muted-foreground">
-                            <FileCode2 className="h-3 w-3 shrink-0" />
-                            {f.file_path ?? "unknown"}
-                            {f.line_start ? `:${f.line_start}` : ""}
-                          </p>
-                          {f.vulnerability?.cvss_score != null && (
-                            <div className="mt-2 flex items-center gap-2 text-xs">
-                              <span className="text-muted-foreground">
-                                {f.vulnerability.identifier}
-                              </span>
-                              <Badge variant="destructive" className="gap-1">
-                                CVSS {f.vulnerability.cvss_score.toFixed(1)}
-                              </Badge>
-                            </div>
-                          )}
-                        </button>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </motion.div>
+                <div className="space-y-2">
+                  {filtered.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setSelected(f)}
+                      className={cn(
+                        "w-full rounded-lg border border-l-2 p-3 text-left transition-colors duration-150 ease-out-expo",
+                        severityBorder[f.severity],
+                        activeFinding?.id === f.id
+                          ? cn(
+                              "border-primary bg-primary/5 shadow-sm",
+                              severityGlow[f.severity]
+                            )
+                          : "border-border/50 hover:border-border hover:bg-muted/30"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <SeverityBadge severity={f.severity} />
+                        <span className="text-xs text-muted-foreground">{f.tool}</span>
+                      </div>
+                      <p className="mt-2 text-sm font-medium leading-snug">{f.message}</p>
+                      <p className="mt-1 flex items-center gap-1 truncate font-mono text-xs text-muted-foreground">
+                        <FileCode2 className="h-3 w-3 shrink-0" />
+                        {f.file_path ?? "unknown"}
+                        {f.line_start ? `:${f.line_start}` : ""}
+                      </p>
+                      {f.vulnerability?.cvss_score != null && (
+                        <div className="mt-2 flex items-center gap-2 text-xs">
+                          <span className="text-muted-foreground">
+                            {f.vulnerability.identifier}
+                          </span>
+                          <Badge variant="destructive" className="gap-1">
+                            CVSS {f.vulnerability.cvss_score.toFixed(1)}
+                          </Badge>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

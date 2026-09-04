@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Compass, GitBranch, HeartHandshake, Mail, Package } from "lucide-react";
+import { Compass, GitBranch, HeartHandshake, Mail, Package, BookOpen } from "lucide-react";
 import { resetTour } from "@/lib/tour";
 
 export function Footer() {
@@ -30,6 +30,11 @@ export function Footer() {
           <span className="mx-1 text-border">·</span>
           <Link href="/integrations" className="transition-colors hover:text-foreground">
             Platform health
+          </Link>
+          <span className="mx-1 text-border">·</span>
+          <Link href="/docs" className="flex items-center gap-1 transition-colors hover:text-foreground">
+            <BookOpen className="h-3.5 w-3.5" />
+            Docs
           </Link>
         </p>
         <p className="flex flex-wrap items-center gap-1.5">

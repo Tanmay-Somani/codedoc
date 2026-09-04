@@ -1,4 +1,7 @@
 import asyncio
+import shutil
+import tempfile
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import case, delete, select
@@ -33,6 +36,72 @@ from app.schemas import (
 )
 
 logger = get_logger(__name__)
+
+
+async def _repo_meta(url: str) -> tuple[int, int]:
+    """Shallow-clone a repo and return (file_count, total_bytes).
+
+    This both verifies the URL points at an existing, reachable repository and
+    lets us populate the repository's metadata (file count / size) immediately
+    on add, instead of showing 0 B / 0 files until an analysis runs.
+
+    Raises ``HTTPException(422)`` if the URL is not a valid, existing repo,
+    telling the user to enter a proper repository.
+    """
+    git = shutil.which("git")
+    if git is None:
+        raise HTTPException(
+            status_code=422,
+            detail="git is not available on the server; cannot verify the repository URL.",
+        )
+
+    tmp = Path(tempfile.mkdtemp(prefix="codedoc-repo-meta-"))
+    try:
+        root = tmp / "repo"
+        cmd = [
+            git,
+            "clone",
+            "--depth",
+            "1",
+            "--quiet",
+            url,
+            str(root),
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except (TimeoutError, OSError):
+            raise HTTPException(
+                status_code=422,
+                detail="Could not reach that repository URL. Please enter a valid, "
+                "existing Git repository (e.g. https://github.com/org/repo.git).",
+            ) from None
+        if proc.returncode != 0:
+            detail = (stderr or b"").decode(errors="ignore").strip().splitlines()
+            raise HTTPException(
+                status_code=422,
+                detail="That repository does not exist or is not reachable. Please "
+                f"enter a proper, existing repo. ({detail[-1] if detail else 'not found'})",
+            )
+
+        file_count = 0
+        total_bytes = 0
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root).as_posix()
+            if rel.startswith(".git/"):
+                continue
+            total_bytes += path.stat().st_size
+            file_count += 1
+        return file_count, total_bytes
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
 
 router = APIRouter(prefix="/api", tags=["analyses"])
 
@@ -261,12 +330,18 @@ async def create_repository(
 ) -> dict[str, object]:
     db: AsyncSession = deps["db"]
     user = await _current_user(db)
+    size_bytes = 0
+    file_count = 0
+    if payload.url and not payload.is_sample:
+        file_count, size_bytes = await _repo_meta(payload.url)
     repo = Repository(
         owner_id=user.id,
         name=payload.name,
         url=payload.url,
         default_branch=payload.default_branch,
         is_sample=payload.is_sample,
+        size_bytes=size_bytes,
+        file_count=file_count,
     )
     db.add(repo)
     try:

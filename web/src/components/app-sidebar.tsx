@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Plug,
   Settings,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/findings", label: "Findings", icon: Radar },
   { href: "/dependencies", label: "Dependencies", icon: ShieldCheck },
   { href: "/integrations", label: "Integrations", icon: Plug },
+  { href: "/docs", label: "Docs", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
