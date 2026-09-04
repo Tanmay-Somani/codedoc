@@ -20,6 +20,25 @@ live backlog.
 
 ## Session change log
 
+- **This session (scan efficiency + token safety + progress):**
+  - **Scanner scans only "necessary files"** (`api/app/scanner.py`): added a very-aggressive
+    source/config whitelist (`_SCAN_EXTENSIONS`, `_SCAN_EXACT_NAMES`), skips vendored/generated dirs
+    (`_SKIP_DIRS`), and a hard per-repo cap `MAX_SCAN_FILES=200` with manifest/config-first priority
+    ordering. The regex scan loop now runs over `_select_scan_files(...)` instead of every file in
+    the tree; the whole-tree `file_count`/`total_bytes` are still returned for repo metadata.
+  - **Token-safety rate limiting on `POST /api/analyze`** (`api/app/api/routes/analyses.py`,
+    `api/app/providers/base.py`): new in-memory `SlidingWindowLimiter` (per-user, in-process) plus a
+    hard input-size cap (`DEMO_ANALYZE_MAX_CHARS`) and a bounded output `max_tokens`
+    (`DEMO_ANALYZE_MAX_TOKENS`). Both excess-size and over-rate requests return `429`.
+  - **Real scan progress bar** (`ScanProgressStore` in `api/app/providers/base.py`, wired in
+    `Registry`; scanner emits phase/current/total via a callback; `AnalysisOut` now carries
+    `progress`/`progress_message`; `web/src/app/findings/page.tsx` renders a determinate bar while
+    scanning). In-memory, migration-free — resets on process restart.
+  - New env vars in `.env.example`: `DEMO_MAX_SCAN_FILES=200`,
+    `DEMO_ANALYZE_LIMIT_PER_MIN=20`, `DEMO_ANALYZE_MAX_CHARS=100000`, `DEMO_ANALYZE_MAX_TOKENS=512`.
+  - Tests: `tests/test_scanner_filter.py`, `tests/test_progress.py`, plus
+    `SlidingWindowLimiter` cases in `tests/test_rate_limit.py`.
+
 - **This session:** UI overhaul — Space Grotesk display font + clinical cyan palette (`globals.css`,
   `tailwind.config.ts`, `layout.tsx`), dashboard page (`/dashboard`), findings-explorer rework
   (severity borders, stepped AI-investigation panel, CSV/JSON/PDF export via `lib/export.ts`,
@@ -73,27 +92,35 @@ instructions too, and each `api`/`web` root has a `.dockerignore`.
 | `/api/integrations/status` | GET | Returns LLM provider list + active + usage (flattens only `llm`; nested provider dicts not consumed by UI yet). |
 | `/api/repositories` | GET | Lists repos; degrades to `[]` if DB unavailable. |
 | `/api/repositories` | POST | Creates a repo (dev bootstrap user via `_current_user`). |
-| `/api/analyses` | GET | Latest 50 analyses. |
+| `/api/analyses` | GET | Latest 50 analyses; carries live `progress`/`progress_message` for in-flight scans (merged from the in-memory `ScanProgressStore`). |
 | `/api/analyses` | POST | Creates an analysis, enforces `DEMO_MAX_CONCURRENT_PER_USER` (429 if exceeded), enqueues `_complete_demo_analysis` as a `BackgroundTask` (NOT Dramatiq). |
 | `/api/analyses/{id}` | GET | Returns all findings for an analysis (incl. `tool="dependency"`); no server-side tool filter yet. |
-| `/api/analyze` | POST | Redacts the prompt, calls `Registry.llm_complete_with_fallback`, returns the explanation. |
+| `/api/analyze` | POST | Redacts the prompt (required gate), enforces **token-safety guards** — per-user `SlidingWindowLimiter` (`DEMO_ANALYZE_LIMIT_PER_MIN`) and a hard input cap (`DEMO_ANALYZE_MAX_CHARS`), both → `429`; calls `Registry.llm_complete_with_fallback` with a bounded `max_tokens` (`DEMO_ANALYZE_MAX_TOKENS`), returns the explanation. |
 
 ### Demo analysis flow (LITE)
 `_complete_demo_analysis` (in `routes/analyses.py`) is a `BackgroundTask` that:
-1. `await asyncio.sleep(2)` (demo placeholder for the scan worker);
-2. for `is_sample` repos → seeds `_SAMPLE_FINDINGS` (bandit/semgrep/gitleaks/ruff/eslint) + a linked
+1. for `is_sample` repos → seeds `_SAMPLE_FINDINGS` (bandit/semgrep/gitleaks/ruff/eslint) + a linked
    `Vulnerability` where applicable, no git clone;
-3. for URL repos → runs `app/scanner.py:run_scan` (shallow git clone + deterministic regex rules +
-   bundled known-vulnerable-dependency table), persisting `Finding` rows.
+2. for URL repos → runs `app/scanner.py:run_scan` (shallow git clone + deterministic regex rules +
+   bundled known-vulnerable-dependency table), which streams progress into the process-local
+   `ScanProgressStore` and returns `(findings, file_count, total_bytes)` for persistence.
 
-Demo safety limits (`DEMO_MAX_REPO_MB=256`, `DEMO_MAX_FILES=5000`, `DEMO_MAX_CONCURRENT_PER_USER=1`)
-are enforced in the scanner and in `POST /api/analyses`. `db_unavailable()` (in `app/api/deps.py`)
-inspects exception names to degrade list/read views to empty when the DB is unreachable.
+The scanner only regex-scans a **prioritized whitelist** of files (`_select_scan_files`: source/config
+extensions + exact names, skipping `node_modules`/`vendor`/`dist`/etc., capped at
+`DEMO_MAX_SCAN_FILES=200`, manifests first) rather than every file in the checkout. `file_count` /
+`total_bytes` still describe the whole tree (used by repo metadata).
+
+Demo safety limits (`DEMO_MAX_REPO_MB=256`, `DEMO_MAX_FILES=5000`, `DEMO_MAX_SCAN_FILES=200`,
+`DEMO_MAX_CONCURRENT_PER_USER=1`, `DEMO_ANALYZE_LIMIT_PER_MIN=20`, `DEMO_ANALYZE_MAX_CHARS=100000`,
+`DEMO_ANALYZE_MAX_TOKENS=512`) are enforced in the scanner, in `POST /api/analyses`, and in
+`POST /api/analyze`. `db_unavailable()` (in `app/api/deps.py`) inspects exception names to degrade
+list/read views to empty when the DB is unreachable.
 
 ### Provider registry (`app/providers/`)
 `Registry` (built once at startup in `lifespan`) holds: `llm_providers`, `search_providers`,
 `vector_store`, `vulnerability_provider` (merged OSV+NVD+GH Advisory), `cache` (Valkey),
-`rates` (in-memory). `llm_complete_with_fallback` tries the chain
+`rates` (in-memory), `analyze_limiter` (in-memory `SlidingWindowLimiter`), `scan_progress`
+(in-memory `ScanProgressStore`). `llm_complete_with_fallback` tries the chain
 **openrouter → gemini → groq → anthropic → openai → ollama**; note `openai`/`anthropic` are skipped
 in the loop only via the gemini/anthropic key checks — reaching `openai` with no key raises
 `RuntimeError("openai: no API key configured")`.
@@ -133,7 +160,7 @@ in the loop only via the gemini/anthropic key checks — reaching `openai` with 
 |---|---|---|
 | Dashboard | Fully wired (`health` + `repositories` + `analyses` + `integrationStatus`) | Risk-score hero (`/5` late-stage model), severity stacked bar, stat cards, live analysis timeline with pulsing status dots, integrations panel, API-down banner. Root `/` still redirects to `/repositories`. |
 | Repositories | Fully wired (`/api/repositories` GET/POST) | "TRY SAMPLE REPOSITORY" flow + driver.js onboarding tour. Delete is **not** wired (`handleDelete` is a stub string error). |
-| Findings | Fully wired (`api.analyses` + `api.findings`, 5 s refetch) | Severity filter + search, `?severity=`/`?analysis=` URL state, stepped AI-investigation panel (Detected → Summary → Debug → Patch), copy-to-clipboard, CSV/JSON/PDF export, findings tour. Falls back to `sampleFindings` when the live analysis is a sample with no persisted findings. **No Monaco viewer, no live Summary-Agent chat** yet. |
+| Findings | Fully wired (`api.analyses` + `api.findings`, 5 s refetch; live progress bar while `analysis.progress` is present) | Severity filter + search, `?severity=`/`?analysis=` URL state, stepped AI-investigation panel (Detected → Summary → Debug → Patch), copy-to-clipboard, CSV/JSON/PDF export, findings tour. Falls back to `sampleFindings` when the live analysis is a sample with no persisted findings. **No Monaco viewer, no live Summary-Agent chat** yet. |
 | Dependencies | **Not wired** — uses a static `dependencies: Dependency[]` mock. The API shape does not yet exist. |
 | Integrations | Partially wired (`api.integrationStatus` + `api.health`) | "Service Status" uses a hardcoded `serviceCatalog` workaround; the backend response nests provider dicts that the page doesn't fully consume. |
 | Settings | **Not wired** — form state only, no GET/POST to an API. Keys are not persisted. Has the "Restart guided tour" control. |

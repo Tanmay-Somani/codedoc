@@ -9,7 +9,14 @@ import redis.asyncio as aioredis
 
 from app.config import Settings
 from app.core.logging import get_logger
-from app.providers.base import Cache, InMemoryRateLimitState, LLMProvider, RateLimitState
+from app.providers.base import (
+    Cache,
+    InMemoryRateLimitState,
+    LLMProvider,
+    RateLimitState,
+    ScanProgressStore,
+    SlidingWindowLimiter,
+)
 from app.providers.llm import build_llm_providers
 from app.providers.search import build_search_providers
 from app.providers.vectorstore import build_vector_store
@@ -43,6 +50,8 @@ class Registry:
         self.settings = settings
         self.cache: Cache = ValkeyCache(settings.valkey_url)
         self.rates: RateLimitState = InMemoryRateLimitState()
+        self.analyze_limiter = SlidingWindowLimiter(settings.demo_analyze_limit_per_min, 60.0)
+        self.scan_progress = ScanProgressStore()
 
         self.llm_providers = build_llm_providers(settings)
         self.search_providers = build_search_providers(settings)

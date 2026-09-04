@@ -26,3 +26,35 @@ def test_rate_state_snapshot_isolated(rate_state):
     snap = rate_state.snapshot()
     snap["osv"]["requests"] = 999
     assert rate_state.snapshot()["osv"]["requests"] == 1
+
+
+def test_sliding_window_allows_under_limit():
+    from app.providers.base import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(max_events=3, window_seconds=60.0)
+    assert limiter.allow("user1") is True
+    assert limiter.allow("user1") is True
+    assert limiter.allow("user1") is True
+    assert limiter.allow("user1") is False  # 4th in window -> blocked
+    assert limiter.remaining("user1") == 0
+
+
+def test_sliding_window_is_per_key():
+    from app.providers.base import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(max_events=1, window_seconds=60.0)
+    assert limiter.allow("alice") is True
+    assert limiter.allow("alice") is False
+    assert limiter.allow("bob") is True  # independent key
+
+
+def test_sliding_window_expires():
+    from app.providers.base import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(max_events=1, window_seconds=0.01)
+    assert limiter.allow("key") is True
+    assert limiter.allow("key") is False  # blocked within window
+    import time
+
+    time.sleep(0.02)
+    assert limiter.allow("key") is True  # window expired

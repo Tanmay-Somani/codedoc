@@ -86,8 +86,14 @@ class Settings(BaseSettings):
     # Demo safety limits
     demo_max_repo_mb: int = 256
     demo_max_files: int = 5000
+    demo_max_scan_files: int = 200
     demo_max_concurrent_per_user: int = 1
     demo_analysis_timeout_min: int = 10
+
+    # Token-safety guards for the LLM /analyze endpoint
+    demo_analyze_limit_per_min: int = 20
+    demo_analyze_max_chars: int = 100_000
+    demo_analyze_max_tokens: int = 512
 
     # Cryptography key for encrypting user-provided API keys at rest
     fernet_key: str = Field(default="", alias="SECRET_KEY")

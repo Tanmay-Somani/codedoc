@@ -28,6 +28,8 @@ export interface Analysis {
   status: AnalysisStatus;
   commit_sha: string | null;
   error: string | null;
+  progress: number | null;
+  progress_message: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 from app.core.logging import get_logger
@@ -21,12 +22,122 @@ from app.models import FindingSeverity
 
 logger = get_logger(__name__)
 
+# Progress snapshot dict keyed for the ScanProgressStore (see app.providers.base).
+ProgressCallback = Callable[[dict[str, object]], None]
+
 
 class ScanError(Exception):
     """Raised when a repository cannot be scanned (no network, bad URL, ...)."""
 
 
 MAX_FILE_SCAN_BYTES = 1_000_000  # only scan file contents up to this size
+
+# ---------------------------------------------------------------------------
+# "Necessary files only" selection. Rather than reading every file in the
+# checked-out tree (which is slow and bloats the finding set), we scan only a
+# prioritized whitelist of source/config files, bounded by MAX_SCAN_FILES.
+# ---------------------------------------------------------------------------
+
+# Very-aggressive whitelist: only these extensions are candidates.
+_SCAN_EXTENSIONS: set[str] = {
+    ".py",
+    ".js",
+    ".ts",
+    ".jsx",
+    ".tsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".c",
+    ".h",
+    ".cpp",
+    ".cc",
+    ".cs",
+    ".rb",
+    ".php",
+    ".sh",
+    ".bash",
+    ".ps1",
+    ".yml",
+    ".yaml",
+    ".json",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".env",
+    ".xml",
+    ".html",
+    ".vue",
+    ".svelte",
+    ".sql",
+    ".md",
+}
+
+# Exact filenames always considered (regardless of extension).
+_SCAN_EXACT_NAMES: set[str] = {
+    "dockerfile",
+    "makefile",
+    "package.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "go.mod",
+    "go.sum",
+}
+
+# Subdirectories (by path segment) that are vendored/generated and skipped.
+_SKIP_DIRS: set[str] = {
+    "node_modules",
+    "vendor",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    "__pycache__",
+    ".next",
+    "target",
+    "third_party",
+    "bower_components",
+    ".git",
+}
+
+# Dependency manifests are prioritized so their content is always scanned.
+_DEPENDENCY_MANIFESTS: set[str] = {"package.json", "requirements.txt", "pyproject.toml", "go.mod"}
+
+# Hard cap on the number of files regex-scanned per repository.
+MAX_SCAN_FILES = 200
+
+
+def _select_scan_files(files: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Return the prioritized subset of ``files`` we actually scan.
+
+    A file is a candidate if its extension is whitelisted or its name is an
+    exact-match config, and none of its path segments is a skip directory.
+    Candidates are ordered very-aggressive, dependency manifest first (making
+    sure manifests survive the cap), then source/config, then the rest, with a
+    deterministic path tiebreak, and truncated to MAX_SCAN_FILES.
+    """
+    candidates: list[tuple[str, str]] = []
+    for rel, path in files:
+        if any(seg in _SKIP_DIRS for seg in Path(rel).parts):
+            continue
+        stem = Path(rel).name.lower()
+        if stem in _SCAN_EXACT_NAMES or stem.endswith(tuple(_SCAN_EXTENSIONS)):
+            candidates.append((rel, path))
+
+    def _priority(item: tuple[str, str]) -> tuple[int, int, str]:
+        stem = Path(item[0]).name.lower()
+        if stem in _DEPENDENCY_MANIFESTS:
+            rank = 0
+        elif stem in _SCAN_EXACT_NAMES or stem.endswith(tuple(_SCAN_EXTENSIONS)):
+            rank = 1
+        else:  # pragma: no cover - unreachable, kept for safety
+            rank = 2
+        return (rank, 0, item[0])
+
+    candidates.sort(key=_priority)
+    return candidates[:MAX_SCAN_FILES]
+
 
 # ---------------------------------------------------------------------------
 # Static heuristic rules. Each rule yields findings with the exact shape the
@@ -349,16 +460,27 @@ def _scan_sync(
     branch: str,
     max_repo_mb: int,
     max_files: int,
+    max_scan_files: int = MAX_SCAN_FILES,
+    progress: ProgressCallback | None = None,
 ) -> tuple[list[dict[str, object]], int, int]:
     """Clone + scan synchronously.
 
     Returns (findings, file_count, total_bytes) where file_count/total_bytes
     describe the scanned working tree (skipping .git) for repo metadata.
+
+    ``progress`` receives ``dict`` snapshots ({phase, current, total, message})
+    as the scan advances; it is called from this worker thread, so callers must
+    keep it thread-safe (e.g. the ScanProgressStore).
     """
     tmp = Path(tempfile.mkdtemp(prefix="codedoc-scan-"))
     try:
         root = tmp / "repo"
         should_fallback = not branch
+
+        if progress:
+            progress(
+                {"phase": "cloning", "current": 0, "total": 0, "message": "Cloning repository…"}
+            )
 
         if branch:
             cmd = [
@@ -426,8 +548,21 @@ def _scan_sync(
         if len(files) > max_files:
             raise ScanError(f"repository exceeds {max_files} file demo limit")
 
+        scan_files = _select_scan_files(files)[:max_scan_files]
+        scan_total = len(scan_files)
+        if progress:
+            progress(
+                {
+                    "phase": "scanning",
+                    "current": 0,
+                    "total": scan_total,
+                    "message": "Starting scan…",
+                }
+            )
+
         findings: list[dict[str, object]] = []
-        for rel, rel_path in files:
+        done = 0
+        for rel, rel_path in scan_files:
             if rel.endswith(_DEPENDENCY_FILES):
                 continue  # handled by _check_dependencies
             size = Path(rel_path).stat().st_size
@@ -438,11 +573,23 @@ def _scan_sync(
             except OSError:
                 continue
             findings.extend(_check_file(rel, content))
+            done += 1
+            if progress and done % 5 == 0:
+                progress(
+                    {
+                        "phase": "scanning",
+                        "current": done,
+                        "total": scan_total,
+                        "message": f"Scanning {rel}",
+                    }
+                )
         findings.extend(_check_dependencies(root))
+        if progress:
+            progress({"phase": "finalizing", "current": 1, "total": 1, "message": "Finalizing…"})
         logger.info(
             "scan_complete",
             repo_url=repo_url,
-            files_scanned=len(files),
+            files_scanned=len(scan_files),
             findings=len(findings),
         )
         return (findings, len(files), total_bytes)
@@ -455,10 +602,14 @@ async def run_scan(
     branch: str,
     max_repo_mb: int,
     max_files: int,
+    max_scan_files: int = MAX_SCAN_FILES,
+    progress: ProgressCallback | None = None,
 ) -> tuple[list[dict[str, object]], int, int]:
     """Clone + scan a repository, returning Finding-shaped dicts.
 
     Runs the blocking clone/scan in a worker thread so the API event loop
     stays responsive.
     """
-    return await asyncio.to_thread(_scan_sync, repo_url, branch, max_repo_mb, max_files)
+    return await asyncio.to_thread(
+        _scan_sync, repo_url, branch, max_repo_mb, max_files, max_scan_files, progress
+    )

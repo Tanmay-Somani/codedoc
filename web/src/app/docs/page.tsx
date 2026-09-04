@@ -108,7 +108,8 @@ const sections: Section[] = [
       "The public demo enforces safety limits so one run cannot take down the instance.",
     labels: [
       { label: "Repo size", value: "at most 256 MB" },
-      { label: "Files per repo", value: "at most 5,000" },
+      { label: "Files per repo", value: "up to 5,000 (scans ~200)" },
+      { label: "LLM analyze calls", value: "20 / user / min" },
       { label: "Concurrent analyses / user", value: "1" },
       { label: "Analysis timeout", value: "10 minutes" },
     ],
@@ -121,6 +122,12 @@ const sections: Section[] = [
     description:
       "In the demo, analysis runs a dependency-light heuristic scanner (no network beyond cloning):",
     items: [
+      {
+        title: "Scans the files that matter",
+        body:
+          "Instead of walking every file, the scanner prioritizes source and config files and " +
+          "skips vendored or generated directories, so big repos still scan quickly.",
+      },
       {
         title: "Secret and key detection",
         body:

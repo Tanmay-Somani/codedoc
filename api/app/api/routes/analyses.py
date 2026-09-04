@@ -24,6 +24,7 @@ from app.models import (
     User,
     Vulnerability,
 )
+from app.providers.base import ScanProgressStore
 from app.providers.registry import Registry
 from app.scanner import ScanError, run_scan
 from app.schemas import (
@@ -241,7 +242,12 @@ async def _persist_findings(
 
 
 async def _complete_demo_analysis(
-    analysis_id: int, max_repo_mb: int, max_files: int, timeout_min: int
+    analysis_id: int,
+    max_repo_mb: int,
+    max_files: int,
+    max_scan_files: int,
+    timeout_min: int,
+    progress_store: ScanProgressStore,
 ) -> None:
     """Demo stand-in for the scan worker: run the real (LITE) heuristics
     scanner against the repository and persist findings. Sample repositories
@@ -268,9 +274,20 @@ async def _complete_demo_analysis(
             await db.commit()
             return
 
+        progress_store.set(
+            analysis_id,
+            {"phase": "cloning", "current": 0, "total": 0, "message": "Cloning repository…"},
+        )
         try:
             scan_results, file_count, total_bytes = await asyncio.wait_for(
-                run_scan(repo.url, repo.default_branch, max_repo_mb, max_files),
+                run_scan(
+                    repo.url,
+                    repo.default_branch,
+                    max_repo_mb,
+                    max_files,
+                    max_scan_files,
+                    lambda snap: progress_store.set(analysis_id, snap),
+                ),
                 timeout=timeout_min * 60,
             )
         except TimeoutError:
@@ -278,18 +295,21 @@ async def _complete_demo_analysis(
             analysis.error = f"analysis timed out after {timeout_min} minutes"
             await db.commit()
             logger.warning("analysis_timed_out", analysis_id=analysis.id)
+            progress_store.clear(analysis_id)
             return
         except ScanError as exc:
             analysis.status = AnalysisStatus.failed
             analysis.error = str(exc)
             await db.commit()
             logger.warning("analysis_failed", analysis_id=analysis.id, error=str(exc))
+            progress_store.clear(analysis_id)
             return
         repo.size_bytes = total_bytes
         repo.file_count = file_count
         analysis.status = AnalysisStatus.completed
         await _persist_findings(db, analysis.id, scan_results)
         await db.commit()
+        progress_store.clear(analysis_id)
         logger.info("analysis_completed", analysis_id=analysis.id)
 
 
@@ -303,6 +323,42 @@ async def _current_user(db: AsyncSession) -> User:
         await db.commit()
         await db.refresh(user)
     return user
+
+
+def _snap_int(snap: dict[str, object], key: str) -> int:
+    """Read an int from a progress snapshot dict (values are typed object)."""
+    value = snap.get(key)
+    return value if isinstance(value, int) else 0
+
+
+def _analysis_out_with_progress(analysis: Analysis, store: ScanProgressStore | None) -> AnalysisOut:
+    """Build an AnalysisOut, merging any live scan progress into it.
+
+    Progress is stored in-memory keyed by analysis id while the scan runs; once
+    it completes the entry is cleared, so only in-flight analyses carry a value.
+    The overall bar fraction is derived from the scanning phase's current/total.
+    """
+    out = AnalysisOut.model_validate(analysis)
+    if store is None or analysis.status != AnalysisStatus.running:
+        return out
+    snap = store.get(analysis.id)
+    if not snap:
+        return out
+    phase = str(snap.get("phase", ""))
+    if phase == "finalizing":
+        out.progress = 1.0
+        out.progress_message = "Finalizing…"
+    elif phase == "scanning":
+        total = _snap_int(snap, "total")
+        current = _snap_int(snap, "current")
+        if total > 0:
+            out.progress = min(1.0, current / total)
+        # Reserve a little headroom before finalizing by scaling to 0.95.
+        out.progress = round((out.progress or 0.0) * 0.95, 3)
+        out.progress_message = str(snap.get("message") or "Scanning…")
+    else:  # cloning or unknown
+        out.progress_message = str(snap.get("message") or "Working…")
+    return out
 
 
 @router.get("/repositories", response_model=list[RepositoryOut])
@@ -414,12 +470,15 @@ async def create_analysis(
     db.add(analysis)
     await db.commit()
     await db.refresh(analysis)
+    registry: Registry = deps["registry"]
     background_tasks.add_task(
         _complete_demo_analysis,
         analysis.id,
         settings.demo_max_repo_mb,
         settings.demo_max_files,
+        settings.demo_max_scan_files,
         settings.demo_analysis_timeout_min,
+        registry.scan_progress,
     )
     logger.info("analysis_created", analysis_id=analysis.id, repository=repo.name)
     return AnalysisOut.model_validate(analysis)
@@ -432,11 +491,12 @@ async def list_analyses(
     deps: Deps = Depends(get_deps),
 ) -> list[AnalysisOut]:
     db: AsyncSession = deps["db"]
+    store: ScanProgressStore = deps["registry"].scan_progress
     try:
         result = await db.execute(
             select(Analysis).order_by(Analysis.created_at.desc()).offset(offset).limit(limit)
         )
-        return [AnalysisOut.model_validate(a) for a in result.scalars().all()]
+        return [_analysis_out_with_progress(a, store) for a in result.scalars().all()]
     except Exception as exc:  # noqa: BLE001 - degrade when DB is unreachable
         if await db_unavailable(exc):
             logger.warning("db_unavailable_analyses", error=str(exc))
@@ -473,14 +533,38 @@ async def get_analysis_findings(
 
 @router.post("/analyze")
 async def analyze(payload: AnalyzeRequest, deps: Deps = Depends(get_deps)) -> dict[str, object]:
-    """Agent-callable LLM analysis. Content is REDACTED before it leaves the server."""
+    """Agent-callable LLM analysis. Content is REDACTED before it leaves the server.
+
+    Token-safety guards: a per-user sliding-window rate limit and a hard cap on
+    input size, plus a bounded output ``max_tokens``, so a runaway caller can't
+    blow through the LLM budget.
+    """
     registry: Registry = deps["registry"]
+    settings = deps["settings"]
+    db: AsyncSession = deps["db"]
+
+    if len(payload.content) > settings.demo_analyze_max_chars:
+        raise HTTPException(
+            status_code=429,
+            detail=f"analyze content exceeds the token-safety limit "
+            f"({settings.demo_analyze_max_chars} chars)",
+        )
+
+    user = await _current_user(db)
+    if not registry.analyze_limiter.allow(str(user.id)):
+        raise HTTPException(
+            status_code=429,
+            detail=f"analyze rate limit reached ({settings.demo_analyze_limit_per_min}/min)",
+        )
+
     safe_content = redact_text(payload.content)
     if safe_content != payload.content:
         logger.info("secrets_redacted_before_llm")
     prompt = f"Task: {payload.task}\n\n{safe_content}"
     try:
-        explanation = await registry.llm_complete_with_fallback(prompt)
+        explanation = await registry.llm_complete_with_fallback(
+            prompt, max_tokens=settings.demo_analyze_max_tokens
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {

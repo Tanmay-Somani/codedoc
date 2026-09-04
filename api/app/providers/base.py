@@ -7,7 +7,10 @@ by :mod:`app.providers.registry`.
 
 from __future__ import annotations
 
+import threading
+import time
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -149,6 +152,77 @@ class InMemoryRateLimitState(RateLimitState):
 
     def snapshot(self) -> dict[str, dict[str, Any]]:
         return {k: dict(v) for k, v in self._state.items()}
+
+
+class SlidingWindowLimiter:
+    """Thread-safe in-memory sliding-window rate limiter.
+
+    Tracks event timestamps per key and allows at most ``max_events`` in the
+    last ``window_seconds``. Good enough for the single-process demo; swap for a
+    Valkey-backed implementation if the API is ever scaled horizontally.
+    """
+
+    def __init__(self, max_events: int, window_seconds: float) -> None:
+        self._max_events = max_events
+        self._window_seconds = window_seconds
+        self._events: dict[str, deque[float]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, key: str) -> bool:
+        """Return True if the key is still under the limit, else False.
+
+        Consumes one allowance on a True return.
+        """
+        now = time.monotonic()
+        cutoff = now - self._window_seconds
+        with self._lock:
+            window = self._events.get(key)
+            if window is None:
+                window = self._events[key] = deque()
+            while window and window[0] < cutoff:
+                window.popleft()
+            if len(window) >= self._max_events:
+                return False
+            window.append(now)
+            return True
+
+    def remaining(self, key: str) -> int:
+        """Number of allowances left for ``key`` (does not consume one)."""
+        now = time.monotonic()
+        cutoff = now - self._window_seconds
+        with self._lock:
+            window = self._events.get(key)
+            if window is None:
+                return self._max_events
+            while window and window[0] < cutoff:
+                window.popleft()
+            return max(self._max_events - len(window), 0)
+
+
+class ScanProgressStore:
+    """Thread-safe, in-memory store of in-flight scan progress.
+
+    The scanner runs in a worker thread (via asyncio.to_thread), so reads from
+    the request handlers and writes from the scan must be lock-guarded. Entries
+    are cleared once the analysis completes or fails.
+    """
+
+    def __init__(self) -> None:
+        self._state: dict[int, dict[str, object]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, analysis_id: int, snapshot: dict[str, object]) -> None:
+        with self._lock:
+            self._state[analysis_id] = dict(snapshot)
+
+    def get(self, analysis_id: int) -> dict[str, object] | None:
+        with self._lock:
+            entry = self._state.get(analysis_id)
+            return dict(entry) if entry is not None else None
+
+    def clear(self, analysis_id: int) -> None:
+        with self._lock:
+            self._state.pop(analysis_id, None)
 
 
 class CachedProvider:

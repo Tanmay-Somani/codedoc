@@ -348,11 +348,43 @@ function FindingsExplorer() {
                 </p>
               )}
               {scanning && (
-                <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Scanning {activeRepo ? `“${activeRepo.name}”` : "the repository"}…
-                  results appear automatically.
-                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Scanning {activeRepo ? `“${activeRepo.name}”` : "the repository"}…
+                    </span>
+                    {active?.progress != null && !failed && (
+                      <span className="font-medium tabular-nums">
+                        {Math.round(active.progress * 100)}%
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={
+                      active?.progress != null ? Math.round(active.progress * 100) : undefined
+                    }
+                  >
+                    <div
+                      className={cn(
+                        "h-full rounded-full bg-primary transition-[width] duration-500 ease-out-expo",
+                        active?.progress == null && "w-1/3 animate-pulse"
+                      )}
+                      style={{
+                        width: active?.progress != null ? `${active.progress * 100}%` : undefined,
+                      }}
+                    />
+                  </div>
+                  {active?.progress_message && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {active.progress_message}
+                    </p>
+                  )}
+                </div>
               )}
               {filtered.length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">

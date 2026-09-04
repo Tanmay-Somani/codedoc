@@ -47,6 +47,8 @@ class AnalysisOut(BaseModel):
     status: str
     commit_sha: str | None = None
     error: str | None = None
+    progress: float | None = None
+    progress_message: str | None = None
     created_at: datetime
     updated_at: datetime
 
