@@ -15,15 +15,18 @@ _DISPLAY_KEY = {"github_advisory": "github advisory"}
 async def integration_status(registry: Registry = Depends(get_registry)) -> IntegrationStatus:
     status = registry.integration_status()
     providers: dict[str, str] = {}
-    for name in (*status["llm"]["providers"], *status["vulnerability"]["providers"],
-                 *status["search"]["providers"]):
+    for name in (
+        *status["llm"]["providers"],
+        *status["vulnerability"]["providers"],
+        *status["search"]["providers"],
+    ):
         providers[_DISPLAY_KEY.get(name, name)] = "configured"
-    providers[_DISPLAY_KEY.get(
-        status["vector_store"]["provider"], status["vector_store"]["provider"]
-    )] = "configured"
-    providers[_DISPLAY_KEY.get(
-        status["cache"]["provider"], status["cache"]["provider"]
-    )] = "configured"
+    providers[
+        _DISPLAY_KEY.get(status["vector_store"]["provider"], status["vector_store"]["provider"])
+    ] = "configured"
+    providers[_DISPLAY_KEY.get(status["cache"]["provider"], status["cache"]["provider"])] = (
+        "configured"
+    )
     return IntegrationStatus(
         providers=providers,
         active_llm=status["llm"]["active"],
