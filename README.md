@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/github/actions/workflow/status/Tanmay-Somani/codedoc/ci.yml" alt="CI"/>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB.svg" alt="Python 3.12"/>
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688.svg" alt="FastAPI"/>
-  <img src="https://img.shields.io/badge/Next.js-15-black.svg" alt="Next.js"/>
+  <img src="https://img.shields.io/badge/Next.js-14-000000.svg" alt="Next.js"/>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178C6.svg" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1.svg" alt="PostgreSQL"/>
   <img src="https://img.shields.io/badge/Qdrant-v1.12-5067F5.svg" alt="Qdrant"/>

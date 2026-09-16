@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import case, delete, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -455,15 +455,17 @@ async def create_analysis(
     if repo is None or repo.owner_id != user.id:
         raise HTTPException(status_code=404, detail="repository not found")
 
-    # Demo safety: cap concurrent analyses per user.
+    # Demo safety: cap concurrent analyses per user (across all their repos).
     settings = deps["settings"]
     active = await db.execute(
-        select(Analysis).where(
-            Analysis.repository_id == repo.id,
+        select(func.count(Analysis.id))
+        .join(Repository, Analysis.repository_id == Repository.id)
+        .where(
+            Repository.owner_id == user.id,
             Analysis.status.in_([AnalysisStatus.queued, AnalysisStatus.running]),
         )
     )
-    if len(active.scalars().all()) >= settings.demo_max_concurrent_per_user:
+    if active.scalar_one() >= settings.demo_max_concurrent_per_user:
         raise HTTPException(status_code=429, detail="concurrent analysis limit reached for demo")
 
     analysis = Analysis(repository_id=repo.id, commit_sha=payload.commit_sha)

@@ -105,7 +105,10 @@ class Registry:
             "llm": {"providers": llm_names, "active": self.active_llm.name},
             "vector_store": {"provider": self.vector_store.name},
             "search": {"providers": [p.name for p in self.search_providers]},
-            "vulnerability": {"provider": self.vulnerability_provider.name},
+            "vulnerability": {
+                "provider": self.vulnerability_provider.name,
+                "providers": self.vulnerability_provider.provider_names,
+            },
             "cache": {"provider": "valkey"},
             "usage": self.rates.snapshot(),
         }

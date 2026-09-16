@@ -41,3 +41,7 @@ AGENTS.md
 
 # ---- Runtime data ----
 .gitdata/
+
+# ---- Local scratch / dev leftovers ----
+probe.js
+_make_subst.bat
