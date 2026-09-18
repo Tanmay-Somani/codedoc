@@ -21,6 +21,16 @@
 
 <p align="center"><b>Deployable without paid infrastructure.</b> No hard AWS/GCP/Azure/Datadog/Sentry dependencies.</p>
 
+<p align="center">
+  <img src="brag-output/brag.jpg" alt="AI Codebase Doctor banner" width="100%"/>
+</p>
+
+## Demo
+
+<p align="center">
+  <video src="brag-output/brag.mp4" width="100%" controls></video>
+</p>
+
 ---
 
 ## Why
